@@ -7,47 +7,49 @@ from datetime import datetime
 
 from konfiguracja import konfig
 
-# Ścieżka do modelu YuNet (konfiguracja po polsku, ale nazwa pliku już nie ma znaczenia)
-sciezkaYunet = konfig.get("sciezka_modelu_yunet", "models/face_detection_yunet_2023mar.onnx")
+# Ścieżka do modelu YuNet
+_SCIEZKA_YUNET = konfig.get("sciezka_modelu_yunet", "models/face_detection_yunet_2023mar.onnx")
 
 
 class BazaTwarzy:
-
     def __init__(self, folder_twarze: str, folder_indeks: str, plik_pracownicy: str):
         self.folder_twarze = folder_twarze
         self.folder_indeks = folder_indeks
         self.plik_pracownicy = plik_pracownicy
 
-        # wczytujemy listę pracowników (NOWY FORMAT TYLKO: {"pracownicy": [...]})
+        # Załaduj bazę pracowników
         self.wczytajPracownikow()
 
-        # inicjalizacja detektorów
-        self.odpalDetektory()
-        self.cascade = cv2.CascadeClassifier(self.znajdzHaar())
+        # Przygotuj detektory twarzy
+        self._init_detectors()
+        # Fallback Haar Cascade
+        self.cascade = cv2.CascadeClassifier(self._find_haar())
+
+        # Ekstraktor cech ORB
         self.orb = cv2.ORB_create(nfeatures=1000)
 
-        # indeks descriptorów ORB
+        # Indeks deskryptorów w pamięci
         self.indeks = {}
         self.wczytajIndeks()
 
-
-    def odpalDetektory(self):
+    # ----- Detektory twarzy -----
+    def _init_detectors(self):
         self._det_yunet = None
         try:
-            if hasattr(cv2, "FaceDetectorYN_create") and os.path.exists(sciezkaYunet):
+            if hasattr(cv2, "FaceDetectorYN_create") and os.path.exists(_SCIEZKA_YUNET):
                 prog_score = float(konfig.get("prog_wykrycia_yunet", 0.85))
                 prog_nms = float(konfig.get("prog_nms", 0.3))
                 limit_top = int(konfig.get("limit_top_yunet", 5000))
+                # Rozmiar wejścia ustawiony zostanie dynamicznie w detekcja
                 self._det_yunet = cv2.FaceDetectorYN_create(
-                    sciezkaYunet, "", (320, 320), prog_score, prog_nms, limit_top
+                    _SCIEZKA_YUNET, "", (320, 320), prog_score, prog_nms, limit_top
                 )
         except Exception:
             self._det_yunet = None
 
     def detekcja(self, obraz_bgr):
         wys, szer = obraz_bgr.shape[:2]
-
-        # YuNet – pierwszy wybór
+        # YuNet
         if self._det_yunet is not None:
             try:
                 self._det_yunet.setInputSize((szer, wys))
@@ -61,8 +63,7 @@ class BazaTwarzy:
                     return ramki
             except Exception:
                 pass
-
-        # fallback – klasyczny Haar
+        # Haar fallback
         try:
             szary = cv2.cvtColor(obraz_bgr, cv2.COLOR_BGR2GRAY)
             twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
@@ -70,18 +71,17 @@ class BazaTwarzy:
         except Exception:
             return []
 
-    def znajdzHaar(self) -> str:
+    # ----- Init helpers -----
+    def _find_haar(self) -> str:
         katalogi = []
         if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
             katalogi.append(cv2.data.haarcascades)
-
         katalogi += [
             "/usr/share/opencv4/haarcascades/",
             "/usr/share/opencv/haarcascades/",
             "/usr/local/share/opencv4/haarcascades/",
             "./",
         ]
-
         nazwa = "haarcascade_frontalface_default.xml"
         for baza in katalogi:
             sciezka = os.path.join(baza, nazwa)
@@ -95,14 +95,12 @@ class BazaTwarzy:
                 dane = json.load(f)
         except Exception:
             dane = {}
+        
+        self.pracownicy = dane.get("pracownicy", [])
+        if not isinstance(self.pracownicy, list):
+            self.pracownicy = []
 
-        lista = dane.get("pracownicy")
-        if not isinstance(lista, list):
-            lista = []
-
-        self.pracownicy = lista
-
-        # indeksy: po PIN i po ID
+        # indeks pracowników po pinie i id
         self.emp_by_pin = {
             e["pin"]: e
             for e in self.pracownicy
@@ -114,23 +112,22 @@ class BazaTwarzy:
         }
 
     def zapiszPracownikow(self):
-        dane = {"pracownicy": list(self.pracownicy)}
+        dane = {"pracownicy": self.pracownicy}
         with open(self.plik_pracownicy, "w", encoding="utf-8") as f:
             json.dump(dane, f, ensure_ascii=False, indent=2)
-        # odśwież indeksy po zapisie
         self.wczytajPracownikow()
 
     def dodajNowego(self, id_prac: str, imie: str, pin: str):
+        """Dopisz pracownika do bazy jeśli jeszcze go nie ma."""
         if not any((e.get("id") == id_prac) for e in self.pracownicy):
             self.pracownicy.append({"id": id_prac, "imie": imie, "pin": pin})
             self.zapiszPracownikow()
-
         os.makedirs(os.path.join(self.folder_twarze, id_prac), exist_ok=True)
 
+    # ----- Zrzuty twarzy -----
     def zbierzProbki(self, id_prac: str, lista_obrazow_bgr):
         folder_prac = os.path.join(self.folder_twarze, id_prac)
         os.makedirs(folder_prac, exist_ok=True)
-
         for obraz in lista_obrazow_bgr:
             nazwa = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg"
             sciezka_wyj = os.path.join(folder_prac, nazwa)
@@ -152,25 +149,25 @@ class BazaTwarzy:
         _, deskryptory = self.orb.detectAndCompute(szary, None)
         if deskryptory is None or len(deskryptory) == 0:
             return False
-
         if id_prac not in self.indeks:
             self.indeks[id_prac] = []
         self.indeks[id_prac].append(deskryptory)
-
+        
         max_len = konfig.get("max_fotek_pracownika", 20)
         if len(self.indeks[id_prac]) > max_len:
             self.indeks[id_prac] = self.indeks[id_prac][-max_len:]
-
+            
         folder_prac = os.path.join(self.folder_twarze, id_prac)
         os.makedirs(folder_prac, exist_ok=True)
         nazwa = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg"
         sciezka = os.path.join(folder_prac, nazwa)
         cv2.imwrite(sciezka, twarz_bgr_240, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-
+        
         self.usunNadmiar(id_prac, max_len)
         self.zapiszIndeks(id_prac, self.indeks[id_prac])
         return True
 
+    # ----- Indeks ORB -----
     def wczytajIndeks(self):
         self.indeks = {}
         for prac in self.pracownicy:
@@ -189,84 +186,79 @@ class BazaTwarzy:
         os.makedirs(self.folder_indeks, exist_ok=True)
         np.savez_compressed(
             os.path.join(self.folder_indeks, f"{id_prac}.npz"),
-            descriptors=np.array(lista_deskryptorow, dtype=object),
+            descriptors=np.array(lista_deskryptorow, dtype=object)
         )
 
     def trenuj(self, progress_callback=None):
         pracownicy = self.pracownicy
         ile = len(pracownicy)
-
         for idx, prac in enumerate(pracownicy):
             id_prac = prac.get("id") or prac.get("imie")
             folder_prac = os.path.join(self.folder_twarze, id_prac)
             lista_desc = []
-
             for sciezka_obr in sorted(glob.glob(os.path.join(folder_prac, "*.jpg"))):
                 obraz = cv2.imread(sciezka_obr)
                 if obraz is None:
                     continue
-
                 szary = cv2.cvtColor(obraz, cv2.COLOR_BGR2GRAY)
+                # Używamy Haara do wycięcia twarzy ze zdjęć treningowych
                 twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
                 if len(twarze) > 0:
                     (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
                     roi = szary[y:y + h, x:x + w]
                 else:
                     roi = szary
-
                 roi = cv2.resize(roi, (240, 240), interpolation=cv2.INTER_LINEAR)
                 _, desc = self.orb.detectAndCompute(roi, None)
                 if desc is not None and len(desc) > 0:
                     lista_desc.append(desc)
-
             self.indeks[id_prac] = lista_desc
             self.zapiszIndeks(id_prac, lista_desc)
-
             if progress_callback:
                 progress_callback(idx + 1, ile)
 
+    # ----- Rozpoznawanie -----
     def rozpoznaj(self, img_bgr):
         szary = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
         twarze = self.detekcja(img_bgr)
         if not twarze:
             return None, None, 0.0, None
-
+        
         (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
         H, W = szary.shape[:2]
-
         x = int(max(0, x))
         y = int(max(0, y))
         w = int(max(0, w))
         h = int(max(0, h))
         x2 = min(x + w, W)
         y2 = min(y + h, H)
-
+        
         if x2 <= x or y2 <= y:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
-
+        
         roi_szary = szary[y:y2, x:x2]
         if roi_szary.size == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
-
+            
         try:
             roi_szary = cv2.resize(roi_szary, (240, 240), interpolation=cv2.INTER_LINEAR)
         except cv2.error:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
-
+            
         _, desc = self.orb.detectAndCompute(roi_szary, None)
         if desc is None or len(desc) == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
-
-        prog_ratio = konfig["wspolczynnik_progu"]
-        prog_min_match = konfig["min_dopasowan"]
-        prog_margin = konfig["min_probek_podrzad"]
-
+            
+        prog_ratio = konfig.get("wspolczynnik_progu", 0.75)
+        prog_min_match = konfig.get("min_dopasowan", 15)
+        prog_margin = konfig.get("min_probek_podrzad", 5) # Uwaga: nazwa w konfigu może być myląca, ale to margin
+        
         knn = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-
+        
         najlepszy_id = None
         najlepszy_wynik = 0
         drugi_wynik = 0
-
+        
         for id_prac, lista_desc in self.indeks.items():
             wynik_emp = 0
             for dset in lista_desc:
@@ -279,34 +271,26 @@ class BazaTwarzy:
                     m1, m2 = para[0], para[1]
                     if m1.distance < prog_ratio * m2.distance:
                         wynik_emp += 1
-
+            
             if wynik_emp > najlepszy_wynik:
-                drugi_wynik, najlepszy_wynik, najlepszy_id = (
-                    najlepszy_wynik,
-                    wynik_emp,
-                    id_prac,
-                )
+                drugi_wynik, najlepszy_wynik, najlepszy_id = najlepszy_wynik, wynik_emp, id_prac
             elif wynik_emp > drugi_wynik:
                 drugi_wynik = wynik_emp
-
+                
         if najlepszy_wynik < prog_min_match:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
-
+            
         if (najlepszy_wynik - drugi_wynik) < prog_margin:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
-
+            
         suma = max(1, najlepszy_wynik + drugi_wynik)
         pewnosc = min(100.0, 100.0 * (najlepszy_wynik / suma))
-
-        # TUTAJ była Twoja "syfna" logika – teraz jest prosto:
+        
         pokaz_nazwa = None
         if najlepszy_id:
             wpis = self.emp_by_id.get(najlepszy_id)
-            if wpis:
-                pokaz_nazwa = wpis.get("imie") or str(najlepszy_id)
-            else:
-                pokaz_nazwa = str(najlepszy_id)
-
+            pokaz_nazwa = wpis.get("imie", najlepszy_id) if wpis else najlepszy_id
+            
         bw = max(0, x2 - x)
         bh = max(0, y2 - y)
         return najlepszy_id, pokaz_nazwa, pewnosc, (x, y, bw, bh)
