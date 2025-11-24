@@ -102,8 +102,8 @@ konfig = {
     "kanal_mikrofonu": 2,
     "min_odleglosc": 8.0,
     "max_odleglosc": 20.0,
-    "prog_glosnosci": 150,
-    "probki_mikrofonu": 32,
+    "prog_glosnosci": 500,
+    "probki_mikrofonu": 64,
 
     # Mail
     "smtp_host": "smtp.gmail.com",

@@ -305,7 +305,7 @@ def pomiar(okno):
 
     odleglosc_cm = okno.odczytaj_odleglosc()
     amp, _ = okno.odczytaj_mikrofon(
-        samples=konfig.get("probki_mikrofonu", 32)
+        samples=konfig.get("probki_mikrofonu")
     )
 
     dmuchanie_wykryte = (

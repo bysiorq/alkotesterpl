@@ -15,7 +15,7 @@ def odczytaj_odleglosc(adc, kanal_odleglosc):
         return float("inf")
 
 
-def odczytaj_mikrofon(adc, kanal_mikrofon, samples=32):
+def odczytaj_mikrofon(adc, kanal_mikrofon, samples):
     try:
         n = max(1, int(samples))
         wartosci = [adc.czytaj(kanal_mikrofon) for _ in range(n)]

@@ -173,7 +173,7 @@ class GlowneOkno(QtWidgets.QMainWindow):
     def odczytaj_odleglosc(self) -> float:
         return pomiary.odczytaj_odleglosc(self.adc, self.kanal_odleglosc)
 
-    def odczytaj_mikrofon(self, samples: int = 32):
+    def odczytaj_mikrofon(self, samples):
         return pomiary.odczytaj_mikrofon(self.adc, self.kanal_mikrofon, samples)
 
     def klik_gosc(self):
