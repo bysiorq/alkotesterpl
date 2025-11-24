@@ -13,7 +13,14 @@ def generuj_raport_pdf(ts, id_prac, nazwa_prac, promille, klatka_bgr):
     pdfmetrics.registerFont(TTFont("DejaVuSans", konfig["czcionka"]))
     
     katalog_raporty = konfig.get("folder_raporty", "logi/raporty_odmowy")
+    
+    # Upewnij się że ścieżka jest relatywna do projektu, nie do roota systemu
+    if not os.path.isabs(katalog_raporty):
+        katalog_bazowy = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        katalog_raporty = os.path.join(katalog_bazowy, katalog_raporty)
+    
     os.makedirs(katalog_raporty, exist_ok=True)
+    print(f"[RAPORT] Katalog raportów: {katalog_raporty}")
     
     ts_bez = ts.replace(":", "-").replace(" ", "_")
     nazwa_pliku = f"odmowa_{ts_bez}_{id_prac or 'unknown'}.pdf"
