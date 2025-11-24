@@ -69,7 +69,7 @@ class GlowneOkno(QtWidgets.QMainWindow):
 
     def cykl_synchronizacji(self):
         try:
-            self.synchronizuj_pracownikow()
+            synchronizacja.synchronizuj_pracownikow(self.baza_twarzy)
         except Exception as e:
             print(f"[SYNC] Błąd okresowego sync-a: {e}")
 

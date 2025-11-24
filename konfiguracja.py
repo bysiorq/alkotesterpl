@@ -86,7 +86,7 @@ konfig = {
     },
 
     # Admin
-    "login_admina": os.getenv("ADMIN_LOGIN", "admin"),
+    "login_admina": os.getenv("ADMIN_USERNAME", "admin"),
     "haslo_admina": os.getenv("ADMIN_PASSWORD", "admin123"),
     "port_admina": 5000,
     "url_bazy_render": "https://inz-di1v.onrender.com",
