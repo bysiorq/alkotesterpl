@@ -20,7 +20,7 @@ def synchronizuj_pracownikow(baza_twarzy):
     params = {"token": token} if token else {}
 
     try:
-        odp = requests.get(url, params=params, timeout=3)
+        odp = requests.get(url, params=params, timeout=10)
         odp.raise_for_status()
         dane = odp.json()
         

@@ -454,7 +454,7 @@ def zbieranie_probek_pracownika(okno):
             )
 
         if zapisane >= ile_potrzeba:
-            okno.baza_twarzy.dodajWieleProbek(id_prac, lista_obrazow)
+            okno.baza_twarzy.zbierzProbki(id_prac, lista_obrazow)
             okno.start_treningu("DETEKCJA_PONOWNA")
         else:
             QtCore.QTimer.singleShot(80, tik)
