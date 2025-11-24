@@ -29,10 +29,6 @@ def zainicjalizuj_aplikacje(okno):
         konfig["folder_indeks"],
         konfig["plik_pracownicy"],
     )
-    prac_start = konfig["pracownik_startowy"]
-    okno.baza_twarzy.dodajNowego(
-        prac_start["id"], prac_start["imie"], prac_start["pin"]
-    )
 
     try:
         synchronizuj_pracownikow(okno.baza_twarzy)

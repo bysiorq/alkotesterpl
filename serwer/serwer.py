@@ -280,15 +280,40 @@ def tablica():
     return render_template_string(szablon_tablicy, wpisy=wpisy, info=info)
 
 
+@aplikacja_flask.route("/pracownicy", methods=["GET"])
+def pracownicy():
+    if not czy_zalogowany():
+        return redirect(url_for("logowanie"))
+    
+    # Pobierz info po dodaniu pracownika
+    nowy_pin = request.args.get("nowy_pin")
+    nazwa_pracownika = request.args.get("nazwa_pracownika")
+    if nowy_pin and nazwa_pracownika:
+        info = f"✅ Dodano pracownika: {nazwa_pracownika}. Wygenerowany PIN: {nowy_pin}"
+    else:
+        info = None
+    
+    # Wczytaj listę pracowników
+    emp_path = sciezka_pracownicy()
+    try:
+        with open(emp_path, "r", encoding="utf-8") as f:
+            dane = json.load(f)
+        lista_pracownikow = dane.get("pracownicy") or []
+    except Exception:
+        lista_pracownikow = []
+    
+    return render_template_string(szablon_pracownikow, pracownicy=lista_pracownikow, info=info)
+
+
 @aplikacja_flask.route("/dodaj_pracownika", methods=["POST"])
 def dodaj_pracownika():
     if not czy_zalogowany():
-        return redirect(url_for("tablica"))
+        return redirect(url_for("pracownicy"))
 
     imie = request.form.get("first_name", "").strip()
     nazwisko = request.form.get("last_name", "").strip()
     if not imie or not nazwisko:
-        return redirect(url_for("tablica"))
+        return redirect(url_for("pracownicy"))
 
     pelne_imie = f"{imie} {nazwisko}"
     nowy_pin = przydziel_pin()
@@ -317,7 +342,7 @@ def dodaj_pracownika():
     except Exception:
         pass
 
-    return redirect(url_for("tablica", nowy_pin=nowy_pin, nazwa_pracownika=pelne_imie))
+    return redirect(url_for("pracownicy", nowy_pin=nowy_pin, nazwa_pracownika=pelne_imie))
 
 
 def uruchom_serwer():
@@ -373,14 +398,31 @@ szablon_tablicy = """
         table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
-        form input { margin-right: 8px; }
+        .nav-buttons { margin-bottom: 1.5em; }
+        .nav-buttons a { 
+            display: inline-block;
+            padding: 10px 20px; 
+            background-color: #1565c0; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .nav-buttons a:hover { background-color: #0d47a1; }
     </style>
 </head>
 <body>
     <h1>Harmonogram wejść pracowników</h1>
+    
+    <div class="nav-buttons">
+        <a href="{{ url_for('pracownicy') }}">👥 Zarządzaj pracownikami</a>
+        <a href="{{ url_for('wyloguj') }}">🚪 Wyloguj</a>
+    </div>
+    
     {% if info %}
     <p style="color: green; font-weight: bold;">{{ info }}</p>
     {% endif %}
+    
     <table>
         <thead>
             <tr>
@@ -407,13 +449,103 @@ szablon_tablicy = """
         {% endfor %}
         </tbody>
     </table>
-    <h2>Dodaj nowego pracownika</h2>
-    <form method="post" action="{{ url_for('dodaj_pracownika') }}">
-        <input type="text" name="first_name" placeholder="Imię" required>
-        <input type="text" name="last_name" placeholder="Nazwisko" required>
-        <button type="submit">Dodaj</button>
-    </form>
-    <p><a href="{{ url_for('wyloguj') }}">Wyloguj</a></p>
+</body>
+</html>
+"""
+
+szablon_pracownikow = """
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Zarządzanie pracownikami</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; margin-top: 2em; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .form-container {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 2em;
+        }
+        .form-container input {
+            padding: 8px;
+            margin-right: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-container button {
+            padding: 10px 20px;
+            background-color: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .form-container button:hover { background-color: #1b5e20; }
+        .nav-buttons { margin-bottom: 1.5em; }
+        .nav-buttons a {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #1565c0;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .nav-buttons a:hover { background-color: #0d47a1; }
+        .success { color: green; font-weight: bold; padding: 10px; background: #e8f5e9; border-radius: 4px; }
+        .pin-display { font-family: monospace; font-size: 1.2em; font-weight: bold; color: #d32f2f; }
+    </style>
+</head>
+<body>
+    <h1>Zarządzanie pracownikami</h1>
+    
+    <div class="nav-buttons">
+        <a href="{{ url_for('tablica') }}">📊 Harmonogram wejść</a>
+        <a href="{{ url_for('wyloguj') }}">🚪 Wyloguj</a>
+    </div>
+    
+    {% if info %}
+    <p class="success">{{ info }}</p>
+    {% endif %}
+    
+    <div class="form-container">
+        <h2>➕ Dodaj nowego pracownika</h2>
+        <form method="post" action="{{ url_for('dodaj_pracownika') }}">
+            <input type="text" name="first_name" placeholder="Imię" required>
+            <input type="text" name="last_name" placeholder="Nazwisko" required>
+            <button type="submit">Dodaj pracownika</button>
+        </form>
+    </div>
+    
+    <h2>👥 Lista pracowników</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Imię</th>
+                <th>Nazwisko</th>
+                <th>PIN</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for prac in pracownicy %}
+            <tr>
+                <td>{{ prac.id }}</td>
+                <td>{{ (prac.imie.split(' ')[0] if prac.imie else '') }}</td>
+                <td>{{ (prac.imie.split(' ', 1)[1] if prac.imie and ' ' in prac.imie else '') }}</td>
+                <td class="pin-display">{{ prac.pin }}</td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="4" style="text-align: center; color: #999;">Brak pracowników. Dodaj pierwszego pracownika powyżej.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </body>
 </html>
 """

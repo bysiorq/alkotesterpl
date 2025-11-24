@@ -78,13 +78,6 @@ konfig = {
     "folder_raporty": "logi/raporty_odmowy",
     "czcionka": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     
-    # Startowy ziomek
-    "pracownik_startowy": {
-        "id": "1",
-        "imie": "Kamil Karolak",
-        "pin": "0000",
-    },
-
     # Admin
     "login_admina": os.getenv("ADMIN_USERNAME", "admin"),
     "haslo_admina": os.getenv("ADMIN_PASSWORD", "admin123"),
