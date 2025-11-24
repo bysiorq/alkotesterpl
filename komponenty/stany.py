@@ -6,7 +6,7 @@ from PyQt5 import QtCore, QtWidgets
 from konfiguracja import konfig
 from fs_pomoc import aktualnyCzas
 from oknoPin import OknoPin
-from komponenty import gui_helpery, wydarzenia, trening
+from komponenty import gui_helpery, wydarzenia, trening, sprzet
 from komponenty.synchronizacja import synchronizuj_pracownikow
 
 # Stany aplikacji - stałe
@@ -234,7 +234,7 @@ def werdykt(okno, promille):
         okno.ustaw_komunikat(tekst_pomiar, "Przejście otwarte", color="green")
         okno.pokaz_guziki(primary_text=None, secondary_text=None)
         okno.sygnal_bramka_mongo(True, okno.ostatni_wynik_promile)
-        okno.dioda_led(True)
+        sprzet.dioda_led(True)
         QtCore.QTimer.singleShot(2500, lambda: bezczynnosc(okno))
         return
 
@@ -254,7 +254,7 @@ def werdykt(okno, promille):
     okno.ustaw_komunikat(tekst_pomiar, "Odmowa", color="red")
     okno.pokaz_guziki(primary_text=None, secondary_text=None)
     okno.sygnal_bramka_mongo(False, okno.ostatni_wynik_promile)
-    okno.dioda_led(False)
+    sprzet.dioda_led(False)
     QtCore.QTimer.singleShot(3000, lambda: bezczynnosc(okno))
 
 
@@ -379,7 +379,7 @@ def obsluz_guzik2(okno):
     if okno.stan == PONOW_POMIAR:
         okno.ustaw_komunikat("Odmowa", "", color="red")
         okno.sygnal_bramka_mongo(False, okno.ostatni_wynik_promile)
-        okno.dioda_led(False)
+        sprzet.dioda_led(False)
         okno.pokaz_guziki(primary_text=None, secondary_text=None)
         QtCore.QTimer.singleShot(2000, lambda: bezczynnosc(okno))
         return
