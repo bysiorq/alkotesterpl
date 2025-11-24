@@ -19,7 +19,7 @@ from kamera import Kamera
 from oknoPin import OknoPin
 
 # Komponenty
-from komponenty import sprzet, pomiary, wydarzenia, gui_helpery, trening, stany, inicjalizacja
+from komponenty import sprzet, pomiary, wydarzenia, gui_helpery, trening, stany, inicjalizacja, synchronizacja
 from komponenty.baza_danych import loguj_do_mongo
 from komponenty.poczta import synchronizuj_mail
 from komponenty.raporty import generuj_raport_pdf
@@ -53,9 +53,6 @@ class GlowneOkno(QtWidgets.QMainWindow):
         self.pokaz_guziki(primary_text=None, secondary_text=None)
 
         self.stan_kalibracjamq3()
-
-        self.stan_kalibracjamq3()
-
 
     def kadr_zoom_przyciecie(self, img, target_w, target_h):
         return gui_helpery.kadr_zoom_przyciecie(img, target_w, target_h)
