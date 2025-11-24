@@ -342,7 +342,7 @@ class GlowneOkno(QtWidgets.QMainWindow):
             )
 
 
-    def stan_kalibracja_mq3(self):
+    def stan_kalibracjamq3(self):
         def watek():
             self.mq3.kalibruj()
             QtCore.QMetaObject.invokeMethod(
