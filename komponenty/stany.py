@@ -420,7 +420,7 @@ def zbieranie_probek_pracownika(okno):
             okno.stan = PIN_NIEUDANY_WYBOR
             okno.ustaw_komunikat(
                 "Nie udało się zebrać próbek",
-                "Przejść do pomiaru na podstawie PIN?",
+                "Przejście na podstawie PIN?",
                 color="red",
             )
             okno.pokaz_guziki(
