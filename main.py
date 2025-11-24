@@ -37,6 +37,8 @@ class GlowneOkno(QtWidgets.QMainWindow):
         
         # Connect signals that might need local methods or were not connected in init
         self.guzik_gosc.clicked.connect(self.klik_gosc)
+        self.guzik_glowny.clicked.connect(self.klik_guzik1)
+        self.guzik_pomocniczy.clicked.connect(self.klik_guzik2)
         self.timer_twarzy.timeout.connect(self.cykl_twarzy)
         self.timer_interfejsu.timeout.connect(self.cykl_interfejsu)
         self.timer_rozpoznany.timeout.connect(self.cykl_rozpoznany)
