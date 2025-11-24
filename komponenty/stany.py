@@ -1,5 +1,6 @@
 import time
 import threading
+import cv2
 from PyQt5 import QtCore, QtWidgets
 
 from konfiguracja import konfig
