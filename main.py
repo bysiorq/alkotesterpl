@@ -9,15 +9,7 @@ import requests
 import numpy as np
 from datetime import datetime
 
-import smtplib
-import io
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
-
 from PyQt5 import QtCore, QtGui, QtWidgets
-import RPi.GPIO as GPIO
 
 from konfiguracja import konfig
 from fs_pomoc import sprawdzKatalogi, aktualnyCzas, zapiszDoPlikuCsv
@@ -26,12 +18,12 @@ from baza_twarzy import BazaTwarzy
 from kamera import Kamera
 from oknoPin import OknoPin
 
-try:
-    from pymongo import MongoClient
-except Exception:
-    MongoClient = None
-
-_KLIENT_MONGO = None
+# Komponenty
+from komponenty import sprzet, pomiary, wydarzenia, gui_helpery, trening, stany
+from komponenty.baza_danych import loguj_do_mongo
+from komponenty.poczta import synchronizuj_mail
+from komponenty.raporty import generuj_raport_pdf
+from komponenty.synchronizacja import synchronizuj_pracownikow
 
 
 def jakosc_twarzy(szare_roi):
@@ -50,11 +42,8 @@ class GlowneOkno(QtWidgets.QMainWindow):
         super().__init__()
         sprawdzKatalogi()
 
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
-        GPIO.setup(konfig["pin_furtki"], GPIO.OUT, initial=GPIO.LOW)
-        GPIO.setup(konfig["pin_led_zielony"], GPIO.OUT, initial=GPIO.LOW)
-        GPIO.setup(konfig["pin_led_czerwony"], GPIO.OUT, initial=GPIO.LOW)
+        # Inicjalizacja sprzętu (GPIO, diody, bramka)
+        sprzet.inicjalizuj_gpio()
 
         self.adc = Mcp3008(konfig["spi_kanal"], konfig["spi_urzadzenie"])
         self.mq3 = CzujnikMQ3(
@@ -75,7 +64,7 @@ class GlowneOkno(QtWidgets.QMainWindow):
         )
 
         try:
-            self.synchronizuj_pracownikow()
+            synchronizuj_pracownikow(self.baza_twarzy)
         except Exception as e:
             print(f"[SYNC] Błąd sync przy starcie: {e}")
 
@@ -263,123 +252,16 @@ class GlowneOkno(QtWidgets.QMainWindow):
 
 
     def kadr_zoom_przyciecie(self, img, target_w, target_h):
-        if img is None or target_w <= 0 or target_h <= 0:
-            return None
-
-        h, w = img.shape[:2]
-        if h == 0 or w == 0:
-            return None
-
-        proporcja_zrodlo = w / float(h)
-        proporcja_cel = target_w / float(target_h)
-
-        if proporcja_zrodlo > proporcja_cel:
-            nowe_w = int(h * proporcja_cel)
-            if nowe_w <= 0:
-                return None
-            x1 = max(0, (w - nowe_w) // 2)
-            x2 = x1 + nowe_w
-            przyciete = img[:, x1:x2]
-        else:
-            nowe_h = int(w / proporcja_cel)
-            if nowe_h <= 0:
-                return None
-            y1 = max(0, (h - nowe_h) // 2)
-            y2 = y1 + nowe_h
-            przyciete = img[y1:y2, :]
-
-        if przyciete.size == 0:
-            return None
-
-        zmienione = cv2.resize(
-            przyciete, (int(target_w), int(target_h)), interpolation=cv2.INTER_AREA
-        )
-        return zmienione
-
-    def synchronizuj_pracownikow(self):
-        baza_url = konfig.get("url_bazy_render")
-        token = konfig.get("haslo")
-        sciezka_prac = konfig.get("plik_pracownicy", "dane/pracownicy.json")
-
-        if not os.path.isabs(sciezka_prac):
-            katalog_biez = os.path.dirname(os.path.abspath(__file__))
-            sciezka_prac = os.path.join(katalog_biez, sciezka_prac)
-
-        if not baza_url:
-            print("[SYNC] Brak url_bazy_render w config - pomijam sync.")
-            return
-
-        url = f"{baza_url.rstrip('/')}/api/pracownicy_public"
-        params = {}
-        if token:
-            params["token"] = token
-
-        try:
-            print(f"[SYNC] Pobieram pracowników z {url} ...")
-            odp = requests.get(url, params=params, timeout=3)
-            odp.raise_for_status()
-            dane = odp.json()
-            if not isinstance(dane, dict):
-                print("[SYNC] Odpowiedź nie jest dict-em - pomijam.")
-                return
-
-            lista_prac = dane.get("pracownicy")
-            if lista_prac is None:
-                lista_prac = dane.get("employees", [])
-            if not isinstance(lista_prac, list):
-                lista_prac = []
-
-            dane_do_zapisu = {"pracownicy": lista_prac}
-
-            os.makedirs(os.path.dirname(sciezka_prac), exist_ok=True)
-            with open(sciezka_prac, "w", encoding="utf-8") as f:
-                json.dump(dane_do_zapisu, f, ensure_ascii=False, indent=2)
-
-            print(f"[SYNC] Zapisano {len(lista_prac)} pracowników do {sciezka_prac}")
-
-            try:
-                self.baza_twarzy.wczytajPracownikow()
-                print("[SYNC] FaceDB przeładowany.")
-            except Exception as e:
-                print(f"[SYNC] Błąd przeładowania FaceDB: {e}")
-
-        except Exception as e:
-            print(f"[SYNC] Błąd pobierania z serwera: {e}")
+        return gui_helpery.kadr_zoom_przyciecie(img, target_w, target_h)
 
     def doucz_twarz(self, id_prac: str):
-        try:
-            if self.ostatni_obrys_twarzy is None:
-                return
-            if self.ostatnia_klatka_bgr is None:
-                return
-
-            (fx, fy, fw, fh) = self.ostatni_obrys_twarzy
-            fx = int(max(0, fx))
-            fy = int(max(0, fy))
-            fw = int(max(0, fw))
-            fh = int(max(0, fh))
-
-            h_img, w_img, _ = self.ostatnia_klatka_bgr.shape
-            x2 = min(fx + fw, w_img)
-            y2 = min(fy + fh, h_img)
-            if x2 <= fx or y2 <= fy:
-                return
-
-            twarz_bgr = self.ostatnia_klatka_bgr[fy:y2, fx:x2].copy()
-            twarz_bgr = cv2.resize(
-                twarz_bgr,
-                (240, 240),
-                interpolation=cv2.INTER_LINEAR,
-            )
-
-            twarz_szara = cv2.cvtColor(twarz_bgr, cv2.COLOR_BGR2GRAY)
-            ok_q, ostrosc, jasnosc = jakosc_twarzy(twarz_szara)
-            if not ok_q:
-                return
-
-            self.baza_twarzy.dodajProbke(id_prac, twarz_bgr)
-        except Exception:
-            pass
+        trening.doucz_twarz_logika(
+            self.baza_twarzy, 
+            id_prac, 
+            self.ostatni_obrys_twarzy,
+            self.ostatnia_klatka_bgr,
+            jakosc_twarzy
+        )
 
     def cykl_synchronizacji(self):
         try:
@@ -395,37 +277,10 @@ class GlowneOkno(QtWidgets.QMainWindow):
             pass
 
     def ustaw_komunikat(self, tekst_gora, tekst_srodek=None, color="white", use_center=True):
-        if color == "green":
-            kolor_css = "#00ff00"
-        elif color == "red":
-            kolor_css = "#ff4444"
-        else:
-            kolor_css = "white"
-
-        self.etykieta_gora.setText(tekst_gora)
-        self.etykieta_gora.setStyleSheet(
-            f"color:{kolor_css}; font-size:28px; font-weight:600;"
-        )
-        if use_center:
-            self.etykieta_srodek.setText(tekst_srodek or "")
-            self.etykieta_srodek.setStyleSheet(
-                f"color:{kolor_css}; font-size:36px; font-weight:700;"
-            )
-            if hasattr(self, "stos_srodek"):
-                self.stos_srodek.setCurrentWidget(self.etykieta_srodek)
+        gui_helpery.ustaw_komunikat(self, tekst_gora, tekst_srodek, color, use_center)
 
     def pokaz_guziki(self, primary_text=None, secondary_text=None):
-        if primary_text is None:
-            self.guzik_glowny.hide()
-        else:
-            self.guzik_glowny.setText(primary_text)
-            self.guzik_glowny.show()
-
-        if secondary_text is None:
-            self.guzik_pomocniczy.hide()
-        else:
-            self.guzik_pomocniczy.setText(secondary_text)
-            self.guzik_pomocniczy.show()
+        gui_helpery.pokaz_guziki(self, primary_text, secondary_text)
 
 
     def bezczynnosc(self):
@@ -914,19 +769,9 @@ class GlowneOkno(QtWidgets.QMainWindow):
 
     def start_treningu(self, akcja_po):
         self.akcja_po_treningu = akcja_po
-
         self.ustaw_komunikat("Proszę czekać…", "Trening AI", color="white")
         self.pokaz_guziki(primary_text=None, secondary_text=None)
-
-        def watek():
-            self.baza_twarzy.trenuj()
-            QtCore.QMetaObject.invokeMethod(
-                self,
-                "koniec_treningu",
-                QtCore.Qt.QueuedConnection,
-            )
-
-        threading.Thread(target=watek, daemon=True).start()
+        trening.uruchom_trening_async(self.baza_twarzy, self, "koniec_treningu")
 
     @QtCore.pyqtSlot()
     def koniec_treningu(self):
@@ -940,342 +785,36 @@ class GlowneOkno(QtWidgets.QMainWindow):
 
     def sygnal_bramka_mongo(self, wejscie_ok: bool, promille: float):
         if self.czy_gosc:
-            if wejscie_ok:
-                GPIO.output(konfig["pin_furtki"], GPIO.HIGH)
-
-                def impuls():
-                    time.sleep(konfig["czas_otwarcia"])
-                    GPIO.output(konfig["pin_furtki"], GPIO.LOW)
-
-                threading.Thread(target=impuls, daemon=True).start()
+            wydarzenia.zapisz_zdarzenie_gosc(wejscie_ok)
             return
-
-        nazwa_prac = self.nazwa_pracownika_biezacego or "<nieznany>"
-        id_prac = self.id_pracownika_biezacego or "<none>"
-        znacznik_czasu = datetime.now().isoformat()
-
-        if wejscie_ok:
-            GPIO.output(konfig["pin_furtki"], GPIO.HIGH)
-
-            def impuls():
-                time.sleep(konfig["czas_otwarcia"])
-                GPIO.output(konfig["pin_furtki"], GPIO.LOW)
-
-            threading.Thread(target=impuls, daemon=True).start()
-
-            zapiszDoPlikuCsv(
-                os.path.join(konfig["folder_logi"], "zdarzenia.csv"),
-                ["data_czas", "zdarzenie", "pracownik_nazwa", "pracownik_id"],
-                [znacznik_czasu, "otwarcie_bramki", nazwa_prac, id_prac],
-            )
-        else:
-            zapiszDoPlikuCsv(
-                os.path.join(konfig["folder_logi"], "zdarzenia.csv"),
-                ["data_czas", "zdarzenie", "pracownik_nazwa", "pracownik_id"],
-                [znacznik_czasu, "odmowa_dostepu", nazwa_prac, id_prac],
-            )
-
-        zapiszDoPlikuCsv(
-            os.path.join(konfig["folder_logi"], "pomiary.csv"),
-            ["data_czas", "pracownik_nazwa", "pracownik_id", "promile", "pomiar_po_PIN"],
-            [
-                znacznik_czasu,
-                nazwa_prac,
-                id_prac,
-                f"{promille:.3f}",
-                int(self.flaga_pin_zapasowy),
-            ],
-        )
-
-        pin_prac = None
-        try:
-            wpis = self.baza_twarzy.emp_by_id.get(self.id_pracownika_biezacego or "")
-            if wpis:
-                pin_prac = wpis.get("pin")
-        except Exception:
-            pin_prac = None
-
-        try:
-            self.synchronizuj_mongo(
-                znacznik_czasu, id_prac, nazwa_prac, pin_prac, promille, wejscie_ok
-            )
-        except Exception as e:
-            print(f"[MongoDebug] Błąd przy uruchamianiu logu do Mongo: {e}")
+        
+        migawka = None
         if not wejscie_ok:
-            migawka = None
             try:
                 if self.ostatnia_klatka_detekcji_bgr is not None:
                     migawka = self.ostatnia_klatka_detekcji_bgr.copy()
                 elif self.ostatnia_klatka_bgr is not None:
                     migawka = self.ostatnia_klatka_bgr.copy()
             except Exception:
-                migawka = None
-
-            try:
-                self.synchronizuj_mail(
-                    znacznik_czasu, id_prac, nazwa_prac, promille, migawka
-                )
-            except Exception as e:
-                print(f"[EMAIL] Błąd przy uruchamianiu wysyłki maila: {e}")
-
-    def synchronizuj_mongo(
-        self, znacznik_czasu, id_prac, nazwa_prac, pin_prac, promille, wejscie_ok: bool
-    ):
-        if MongoClient is None:
-            print("[MongoDebug] Brak biblioteki pymongo – pomijam logowanie do Mongo.")
-            return
-
-        mongo_uri = konfig.get("mongo_uri") or ""
-        nazwa_bazy = konfig.get("nazwa_bazy_mongo") or "alkotester"
-
-        print(
-            f"[MongoDebug] Kolejkuję log do Mongo, uri ustawione={bool(mongo_uri)}, "
-            f"baza={nazwa_bazy!r}"
+                pass
+        
+        wydarzenia.zapisz_zdarzenie(
+            wejscie_ok,
+            self.nazwa_pracownika_biezacego or "<nieznany>",
+            self.id_pracownika_biezacego or "<none>",
+            promille,
+            self.flaga_pin_zapasowy,
+            self.baza_twarzy,
+            migawka
         )
 
-        if not mongo_uri:
-            print("[MongoDebug] Brak mongo_uri w konfiguracji – zapis tylko do CSV.")
-            return
 
-        def watek():
-            global _KLIENT_MONGO
-            try:
-                print("[MongoDebug] Worker start")
-
-                if _KLIENT_MONGO is None:
-                    print("[MongoDebug] Tworzę nowy MongoClient...")
-                    _KLIENT_MONGO = MongoClient(
-                        mongo_uri,
-                        serverSelectionTimeoutMS=5000,
-                        connectTimeoutMS=5000,
-                        socketTimeoutMS=5000,
-                    )
-                    _KLIENT_MONGO.admin.command("ping")
-                    print("[MongoDebug] Połączenie z Mongo OK")
-
-                baza = _KLIENT_MONGO[nazwa_bazy]
-                kolekcja = baza["wejscia"]
-                dokument = {
-                    "data_czas": znacznik_czasu,
-                    "pracownik_id": id_prac,
-                    "pracownik_nazwa": nazwa_prac,
-                    "pracownik_pin": pin_prac,
-                    "promile": float(promille),
-                    "wynik": "WEJSCIE_OK" if wejscie_ok else "ODMOWA",
-                    "pomiar_po_PIN": bool(self.flaga_pin_zapasowy),
-                }
-                wynik = kolekcja.insert_one(dokument)
-                print(f"[MongoDebug] insert_one OK, _id={wynik.inserted_id}")
-            except Exception:
-                import traceback
-
-                print("[Mongo] Błąd logowania do Mongo:")
-                traceback.print_exc()
-
-        threading.Thread(target=watek, daemon=True).start()
-
-    def synchronizuj_mail(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
-        def watek():
-            try:
-                self.wyslij_mail_odmowa(ts, id_prac, nazwa_prac, promille, klatka_bgr)
-            except Exception as e:
-                print(f"[EMAIL] Błąd wysyłki maila: {e}")
-
-        threading.Thread(target=watek, daemon=True).start()
-
-    def wyslij_mail_odmowa(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
-        smtp_host = konfig.get("smtp_host")
-        if not smtp_host:
-            print("[EMAIL] Brak smtp_host w config - pomijam wysyłkę maila.")
-            return
-
-        smtp_port = int(konfig.get("smtp_port", 587))
-        smtp_user = konfig.get("smtp_user") or ""
-        smtp_password = konfig.get("smtp_password") or ""
-        smtp_use_tls = bool(konfig.get("uzywaj_tls", True))
-        from_addr = konfig.get("smtp_from") or smtp_user or "alkotester@localhost"
-        to_addr = konfig.get("mail_alertowy")
-
-        if not to_addr:
-            print("[EMAIL] Brak mail_alertowy w config - pomijam wysyłkę maila.")
-            return
-
-        pdf_path = self.generuj_raport(ts, id_prac, nazwa_prac, promille, klatka_bgr)
-        if pdf_path is None:
-            print("[EMAIL] Nie udało się wygenerować PDF - nie wysyłam maila.")
-            return
-
-        temat = f"Odmowa wejścia - {nazwa_prac} ({promille:.3f} ‰)"
-        tresc = (
-            "System Alkotester - odmowa wejścia na obiekt.\n\n"
-            f"Data i czas: {ts}\n"
-            f"Pracownik: {nazwa_prac} (ID: {id_prac})\n"
-            f"Wynik pomiaru: {promille:.3f} [‰]\n"
-        )
-
-        wiadomosc = MIMEMultipart()
-        wiadomosc["Subject"] = temat
-        wiadomosc["From"] = from_addr
-        wiadomosc["To"] = to_addr
-        wiadomosc.attach(MIMEText(tresc, "plain", "utf-8"))
-
-        try:
-            with open(pdf_path, "rb") as f:
-                zal = MIMEBase("application", "pdf")
-                zal.set_payload(f.read())
-            encoders.encode_base64(zal)
-            zal.add_header(
-                "Content-Disposition",
-                f'attachment; filename="{os.path.basename(pdf_path)}"',
-            )
-            wiadomosc.attach(zal)
-        except Exception as e:
-            print(f"[EMAIL] Nie udało się dołączyć PDF-a: {e}")
-            return
-
-        try:
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as serwer:
-                if smtp_use_tls:
-                    serwer.starttls()
-                if smtp_user and smtp_password:
-                    serwer.login(smtp_user, smtp_password)
-                serwer.send_message(wiadomosc)
-            print(f"[EMAIL] Wysłano mail o odmowie na {to_addr} z PDF-em {pdf_path}")
-        except Exception as e:
-            print(f"[EMAIL] Błąd SMTP: {e}")
-
-    def generuj_raport(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
-        try:
-            from reportlab.pdfgen import canvas
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.utils import ImageReader
-            from reportlab.pdfbase import pdfmetrics
-            from reportlab.pdfbase.ttfonts import TTFont
-        except ImportError:
-            print(
-                "[PDF] Brak biblioteki reportlab (pip install reportlab) - pomijam PDF."
-            )
-            return None
-
-        nazwa_czcionki = "DejaVuSans"
-        sciezka_czcionki = konfig.get(
-            "czcionka", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        )
-        try:
-            pdfmetrics.registerFont(TTFont(nazwa_czcionki, sciezka_czcionki))
-        except Exception as e:
-            print(
-                f"[PDF] Nie udało się zarejestrować fontu '{sciezka_czcionki}': {e}"
-            )
-            nazwa_czcionki = "Helvetica"
-
-        katalog_raporty = konfig.get("folder_raporty") or konfig.get("folder_logi") or "logi"
-        try:
-            os.makedirs(katalog_raporty, exist_ok=True)
-        except Exception as e:
-            print(f"[PDF] Nie mogę utworzyć katalogu na raporty: {e}")
-            return None
-
-        ts_bez = ts.replace(":", "-").replace(" ", "_")
-        nazwa_pliku = f"odmowa_{ts_bez}_{id_prac or 'unknown'}.pdf"
-        sciezka_pdf = os.path.join(katalog_raporty, nazwa_pliku)
-
-        try:
-            c = canvas.Canvas(sciezka_pdf, pagesize=A4)
-            szerokosc, wysokosc = A4
-            tekst = c.beginText(40, wysokosc - 40)
-            tekst.setFont(nazwa_czcionki, 14)
-            tekst.textLine("Odmowa wejścia na obiekt - raport")
-            tekst.moveCursor(0, 20)
-            tekst.setFont(nazwa_czcionki, 11)
-            tekst.textLine(f"Data i czas: {ts}")
-            tekst.textLine(f"Pracownik: {nazwa_prac} (ID: {id_prac})")
-            tekst.textLine(f"Wynik pomiaru: {promille:.3f} [‰]")
-            c.drawText(tekst)
-
-            if klatka_bgr is not None:
-                try:
-                    ok, buf = cv2.imencode(".jpg", klatka_bgr)
-                    if ok:
-                        bajty = io.BytesIO(buf.tobytes())
-                        obraz = ImageReader(bajty)
-                        img_w, img_h = obraz.getSize()
-
-                        max_w = szerokosc - 80
-                        max_h = wysokosc - 200
-
-                        skala = min(max_w / img_w, max_h / img_h, 1.0)
-                        rys_w = img_w * skala
-                        rys_h = img_h * skala
-
-                        x = (szerokosc - rys_w) / 2.0
-                        y = max(40, (wysokosc - rys_h) / 2.0 - 20)
-
-                        c.drawImage(
-                            obraz,
-                            x,
-                            y,
-                            width=rys_w,
-                            height=rys_h,
-                            preserveAspectRatio=True,
-                            mask=None,
-                        )
-                except Exception as e:
-                    print(f"[PDF] Błąd osadzania zdjęcia w PDF: {e}")
-
-            c.showPage()
-            c.save()
-            print(f"[PDF] Zapisano raport odmowy do {sciezka_pdf}")
-            return sciezka_pdf
-        except Exception as e:
-            print(f"[PDF] Błąd generowania PDF: {e}")
-            return None
-
-    def dioda_led(self, wejscie_ok: bool):
-        try:
-            pin = (
-                konfig["pin_led_zielony"]
-                if wejscie_ok
-                else konfig["pin_led_czerwony"]
-            )
-            czas_impulsu = float(konfig.get("czas_swiecenia", 2.0))
-            GPIO.output(pin, GPIO.HIGH)
-
-            def watek():
-                try:
-                    time.sleep(czas_impulsu)
-                finally:
-                    GPIO.output(pin, GPIO.LOW)
-
-            threading.Thread(target=watek, daemon=True).start()
-        except Exception as e:
-            print(f"[LED] Błąd sterowania diodą: {e}")
 
     def odczytaj_odleglosc(self) -> float:
-        try:
-            raw = self.adc.czytaj(self.kanal_odleglosc)
-            napiecie = (raw / 1023.0) * 3.3
-            if napiecie - 0.42 <= 0:
-                return float("inf")
-            odleglosc = 27.86 / (napiecie - 0.42)
-            if odleglosc < 0 or odleglosc > 80:
-                return float("inf")
-            return odleglosc
-        except Exception:
-            return float("inf")
+        return pomiary.odczytaj_odleglosc(self.adc, self.kanal_odleglosc)
 
     def odczytaj_mikrofon(self, samples: int = 32):
-        try:
-            n = max(1, int(samples))
-            wartosci = [self.adc.czytaj(self.kanal_mikrofon) for _ in range(n)]
-            min_v = min(wartosci)
-            max_v = max(wartosci)
-            avg = int(sum(wartosci) / len(wartosci))
-            amp = max_v - min_v
-            return amp, avg
-        except Exception as e:
-            print(f"[MIKROFON] błąd odczytu: {e}")
-            return 0, 0
+        return pomiary.odczytaj_mikrofon(self.adc, self.kanal_mikrofon, samples)
 
     def klik_gosc(self):
         self.czy_gosc = True
