@@ -432,31 +432,87 @@ def zbieranie_probek_pracownika(okno):
             QtCore.QTimer.singleShot(80, tik)
             return
 
-        sukces, twarz_bgr = trening.zbierz_probke_twarzy(
-            okno.ostatnia_klatka_bgr,
-            [okno.ostatni_obrys_twarzy] if okno.ostatni_obrys_twarzy else [],
-            konfig,
-            lambda img: trening.jakosc_twarzy(img, konfig)
-        )
-        # TODO: jakosc_twarzy needs to be passed or extracted. 
-        # For now, let's assume trening.zbierz_probke_twarzy handles it if we pass the function.
-        # But jakosc_twarzy is in main.py. I should extract it to gui_helpery or stany or trening.
-        
-        # Let's fix this in next step. For now I'll use a placeholder or import if I move it.
+        klatka = okno.ostatnia_klatka_bgr
+        szary = cv2.cvtColor(klatka, cv2.COLOR_BGR2GRAY)
 
-        if sukces:
-            lista_obrazow.append(twarz_bgr)
-            zapisane += 1
+        twarze = okno.baza_twarzy.detekcja(klatka)
+        if not twarze:
+            okno.ostatni_obrys_twarzy = None
             okno.ustaw_komunikat(
                 "Przytrzymaj twarz w obwódce",
                 f"Zbieram próbki {zapisane}/{ile_potrzeba}",
                 color="white",
             )
+            QtCore.QTimer.singleShot(80, tik)
+            return
+
+        (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
+        okno.ostatni_obrys_twarzy = (x, y, w, h)
+        okno.ostatnia_pewnosc = 100.0
+
+        h_img, w_img = szary.shape[:2]
+        x1 = max(0, int(x))
+        y1 = max(0, int(y))
+        x2 = min(int(x + w), w_img)
+        y2 = min(int(y + h), h_img)
+
+        if x2 <= x1 or y2 <= y1:
+            okno.ustaw_komunikat(
+                "Przytrzymaj twarz w obwódce",
+                f"Zbieram próbki {zapisane}/{ile_potrzeba}",
+                color="white",
+            )
+            QtCore.QTimer.singleShot(80, tik)
+            return
+
+        if max(x2 - x1, y2 - y1) < konfig["min_rozmiar_twarzy"]:
+            okno.ustaw_komunikat(
+                "Podejdź bliżej",
+                f"Zbieram próbki {zapisane}/{ile_potrzeba}",
+                color="white",
+            )
+            QtCore.QTimer.singleShot(80, tik)
+            return
+
+        roi_gray = szary[y1:y2, x1:x2]
+        if roi_gray.size == 0:
+            QtCore.QTimer.singleShot(80, tik)
+            return
+
+        roi_gray_resized = cv2.resize(
+            roi_gray,
+            (240, 240),
+            interpolation=cv2.INTER_LINEAR,
+        )
+
+        # Import jakosc_twarzy z trening.py
+        ok, ostrosc, jasnosc = trening.jakosc_twarzy(roi_gray_resized, konfig)
+        if not ok:
+            okno.ustaw_komunikat(
+                "Stań prosto, popraw światło",
+                f"ostrość {ostrosc:0.0f}, jasność {jasnosc:0.0f}  [{zapisane}/{ile_potrzeba}]",
+                color="white",
+            )
+            QtCore.QTimer.singleShot(80, tik)
+            return
+
+        twarz_bgr = klatka[y1:y2, x1:x2].copy()
+        twarz_bgr = cv2.resize(twarz_bgr, (240, 240), interpolation=cv2.INTER_LINEAR)
+        lista_obrazow.append(twarz_bgr)
+        zapisane += 1
+
+        okno.ustaw_komunikat(
+            "Próbka zapisana",
+            f"Zbieram próbki {zapisane}/{ile_potrzeba}",
+            color="green",
+        )
 
         if zapisane >= ile_potrzeba:
             okno.baza_twarzy.zbierzProbki(id_prac, lista_obrazow)
             okno.start_treningu("DETEKCJA_PONOWNA")
-        else:
-            QtCore.QTimer.singleShot(80, tik)
+            return
 
-    tik()
+        QtCore.QTimer.singleShot(120, tik)
+
+    QtCore.QTimer.singleShot(80, tik)
+
