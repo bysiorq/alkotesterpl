@@ -1,0 +1,312 @@
+import os
+import glob
+import json
+import cv2
+import numpy as np
+from datetime import datetime
+
+from config import config
+
+# Ścieżka do modelu YuNet (konfiguracja po polsku, ale nazwa pliku już nie ma znaczenia)
+sciezkaYunet = config.get("sciezkaYunet", "models/face_detection_yunet_2023mar.onnx")
+
+
+class detektorTwarzy:
+
+    def __init__(self, katalogTwarze: str, katalogIndex: str, pracownicyListajson: str):
+        self.katalogTwarze = katalogTwarze
+        self.katalogIndex = katalogIndex
+        self.pracownicyListajson = pracownicyListajson
+
+        # wczytujemy listę pracowników (NOWY FORMAT TYLKO: {"pracownicy": [...]})
+        self.wczytajPracownikow()
+
+        # inicjalizacja detektorów
+        self.init_detektory()
+        self.cascade = cv2.CascadeClassifier(self.haar())
+        self.orb = cv2.ORB_create(nfeatures=1000)
+
+        # indeks descriptorów ORB
+        self.index = {}
+        self.wczytajIDx()
+
+
+    def init_detektory(self):
+        self._det_yunet = None
+        try:
+            if hasattr(cv2, "FaceDetectorYN_create") and os.path.exists(sciezkaYunet):
+                prog_score = float(config.get("yunet_prog_rozpoznania", 0.85))
+                prog_nms = float(config.get("prog_najlepszadetekcja", 0.3))
+                limit_top = int(config.get("yunet_topwartosc", 5000))
+                self._det_yunet = cv2.FaceDetectorYN_create(
+                    sciezkaYunet, "", (320, 320), prog_score, prog_nms, limit_top
+                )
+        except Exception:
+            self._det_yunet = None
+
+    def wykryjTwarz(self, obraz_bgr):
+        wys, szer = obraz_bgr.shape[:2]
+
+        # YuNet – pierwszy wybór
+        if self._det_yunet is not None:
+            try:
+                self._det_yunet.setInputSize((szer, wys))
+                _, twarze = self._det_yunet.detect(obraz_bgr)
+                ramki = []
+                if twarze is not None and len(twarze) > 0:
+                    for det in twarze:
+                        x, y, ww, hh = det[:4]
+                        ramki.append((int(x), int(y), int(ww), int(hh)))
+                if ramki:
+                    return ramki
+            except Exception:
+                pass
+
+        # fallback – klasyczny Haar
+        try:
+            szary = cv2.cvtColor(obraz_bgr, cv2.COLOR_BGR2GRAY)
+            twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
+            return [(int(x), int(y), int(ww), int(hh)) for (x, y, ww, hh) in twarze]
+        except Exception:
+            return []
+
+    def haar(self) -> str:
+        katalogi = []
+        if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
+            katalogi.append(cv2.data.haarcascades)
+
+        katalogi += [
+            "/usr/share/opencv4/haarcascades/",
+            "/usr/share/opencv/haarcascades/",
+            "/usr/local/share/opencv4/haarcascades/",
+            "./",
+        ]
+
+        nazwa = "haarcascade_frontalface_default.xml"
+        for baza in katalogi:
+            sciezka = os.path.join(baza, nazwa)
+            if os.path.exists(sciezka):
+                return sciezka
+        return nazwa
+
+    def wczytajPracownikow(self):
+        try:
+            with open(self.pracownicyListajson, "r", encoding="utf-8") as f:
+                dane = json.load(f)
+        except Exception:
+            dane = {}
+
+        lista = dane.get("pracownicy")
+        if not isinstance(lista, list):
+            lista = []
+
+        self.pracownicy = lista
+
+        # indeksy: po PIN i po ID
+        self.emp_by_pin = {
+            e["pin"]: e
+            for e in self.pracownicy
+            if "pin" in e
+        }
+        self.emp_by_id = {
+            (e.get("id") or e.get("imie")): e
+            for e in self.pracownicy
+        }
+
+    def zapiszpracownikow(self):
+        dane = {"pracownicy": list(self.pracownicy)}
+        with open(self.pracownicyListajson, "w", encoding="utf-8") as f:
+            json.dump(dane, f, ensure_ascii=False, indent=2)
+        # odśwież indeksy po zapisie
+        self.wczytajPracownikow()
+
+    def Czynowy_pracownik(self, id_prac: str, imie: str, pin: str):
+        if not any((e.get("id") == id_prac) for e in self.pracownicy):
+            self.pracownicy.append({"id": id_prac, "imie": imie, "pin": pin})
+            self.zapiszpracownikow()
+
+        os.makedirs(os.path.join(self.katalogTwarze, id_prac), exist_ok=True)
+
+    def zbierzprobki(self, id_prac: str, lista_obrazow_bgr):
+        folder_prac = os.path.join(self.katalogTwarze, id_prac)
+        os.makedirs(folder_prac, exist_ok=True)
+
+        for obraz in lista_obrazow_bgr:
+            nazwa = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg"
+            sciezka_wyj = os.path.join(folder_prac, nazwa)
+            cv2.imwrite(sciezka_wyj, obraz, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+
+    def limitZdjec(self, id_prac: str, max_len: int):
+        folder_prac = os.path.join(self.katalogTwarze, id_prac)
+        pliki = sorted(glob.glob(os.path.join(folder_prac, "*.jpg")))
+        nadmiar = len(pliki) - max_len
+        if nadmiar > 0:
+            for sciezka in pliki[:nadmiar]:
+                try:
+                    os.remove(sciezka)
+                except Exception:
+                    pass
+
+    def nowaprobkaTWARZY(self, id_prac: str, twarz_bgr_240):
+        szary = cv2.cvtColor(twarz_bgr_240, cv2.COLOR_BGR2GRAY)
+        _, deskryptory = self.orb.detectAndCompute(szary, None)
+        if deskryptory is None or len(deskryptory) == 0:
+            return False
+
+        if id_prac not in self.index:
+            self.index[id_prac] = []
+        self.index[id_prac].append(deskryptory)
+
+        max_len = config.get("max_probekPracownik", 20)
+        if len(self.index[id_prac]) > max_len:
+            self.index[id_prac] = self.index[id_prac][-max_len:]
+
+        folder_prac = os.path.join(self.katalogTwarze, id_prac)
+        os.makedirs(folder_prac, exist_ok=True)
+        nazwa = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg"
+        sciezka = os.path.join(folder_prac, nazwa)
+        cv2.imwrite(sciezka, twarz_bgr_240, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+
+        self.limitZdjec(id_prac, max_len)
+        self.zapiszidx(id_prac, self.index[id_prac])
+        return True
+
+    def wczytajIDx(self):
+        self.index = {}
+        for prac in self.pracownicy:
+            id_prac = prac.get("id") or prac.get("imie")
+            sciezka_npz = os.path.join(self.katalogIndex, f"{id_prac}.npz")
+            if os.path.exists(sciezka_npz):
+                try:
+                    npz = np.load(sciezka_npz, allow_pickle=True)
+                    self.index[id_prac] = list(npz.get("descriptors", []))
+                except Exception:
+                    self.index[id_prac] = []
+            else:
+                self.index[id_prac] = []
+
+    def zapiszidx(self, id_prac: str, lista_deskryptorow):
+        os.makedirs(self.katalogIndex, exist_ok=True)
+        np.savez_compressed(
+            os.path.join(self.katalogIndex, f"{id_prac}.npz"),
+            descriptors=np.array(lista_deskryptorow, dtype=object),
+        )
+
+    def treningnpz(self, progress_callback=None):
+        pracownicy = self.pracownicy
+        ile = len(pracownicy)
+
+        for idx, prac in enumerate(pracownicy):
+            id_prac = prac.get("id") or prac.get("imie")
+            folder_prac = os.path.join(self.katalogTwarze, id_prac)
+            lista_desc = []
+
+            for sciezka_obr in sorted(glob.glob(os.path.join(folder_prac, "*.jpg"))):
+                obraz = cv2.imread(sciezka_obr)
+                if obraz is None:
+                    continue
+
+                szary = cv2.cvtColor(obraz, cv2.COLOR_BGR2GRAY)
+                twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
+                if len(twarze) > 0:
+                    (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
+                    roi = szary[y:y + h, x:x + w]
+                else:
+                    roi = szary
+
+                roi = cv2.resize(roi, (240, 240), interpolation=cv2.INTER_LINEAR)
+                _, desc = self.orb.detectAndCompute(roi, None)
+                if desc is not None and len(desc) > 0:
+                    lista_desc.append(desc)
+
+            self.index[id_prac] = lista_desc
+            self.zapiszidx(id_prac, lista_desc)
+
+            if progress_callback:
+                progress_callback(idx + 1, ile)
+
+    def rozpoznawanie(self, img_bgr):
+        szary = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        twarze = self.wykryjTwarz(img_bgr)
+        if not twarze:
+            return None, None, 0.0, None
+
+        (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
+        H, W = szary.shape[:2]
+
+        x = int(max(0, x))
+        y = int(max(0, y))
+        w = int(max(0, w))
+        h = int(max(0, h))
+        x2 = min(x + w, W)
+        y2 = min(y + h, H)
+
+        if x2 <= x or y2 <= y:
+            return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
+
+        roi_szary = szary[y:y2, x:x2]
+        if roi_szary.size == 0:
+            return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
+
+        try:
+            roi_szary = cv2.resize(roi_szary, (240, 240), interpolation=cv2.INTER_LINEAR)
+        except cv2.error:
+            return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
+
+        _, desc = self.orb.detectAndCompute(roi_szary, None)
+        if desc is None or len(desc) == 0:
+            return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
+
+        prog_ratio = config["prog_dopasowaniaTwarzy"]
+        prog_min_match = config["minIloscRozpoznan"]
+        prog_margin = config["minProbkipodrzad"]
+
+        knn = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+
+        najlepszy_id = None
+        najlepszy_wynik = 0
+        drugi_wynik = 0
+
+        for id_prac, lista_desc in self.index.items():
+            wynik_emp = 0
+            for dset in lista_desc:
+                if dset is None or len(dset) == 0:
+                    continue
+                dopasowania = knn.knnMatch(desc, dset, k=2)
+                for para in dopasowania:
+                    if len(para) < 2:
+                        continue
+                    m1, m2 = para[0], para[1]
+                    if m1.distance < prog_ratio * m2.distance:
+                        wynik_emp += 1
+
+            if wynik_emp > najlepszy_wynik:
+                drugi_wynik, najlepszy_wynik, najlepszy_id = (
+                    najlepszy_wynik,
+                    wynik_emp,
+                    id_prac,
+                )
+            elif wynik_emp > drugi_wynik:
+                drugi_wynik = wynik_emp
+
+        if najlepszy_wynik < prog_min_match:
+            return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
+
+        if (najlepszy_wynik - drugi_wynik) < prog_margin:
+            return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
+
+        suma = max(1, najlepszy_wynik + drugi_wynik)
+        pewnosc = min(100.0, 100.0 * (najlepszy_wynik / suma))
+
+        # TUTAJ była Twoja "syfna" logika – teraz jest prosto:
+        pokaz_nazwa = None
+        if najlepszy_id:
+            wpis = self.emp_by_id.get(najlepszy_id)
+            if wpis:
+                pokaz_nazwa = wpis.get("imie") or str(najlepszy_id)
+            else:
+                pokaz_nazwa = str(najlepszy_id)
+
+        bw = max(0, x2 - x)
+        bh = max(0, y2 - y)
+        return najlepszy_id, pokaz_nazwa, pewnosc, (x, y, bw, bh)
