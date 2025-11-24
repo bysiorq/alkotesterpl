@@ -55,7 +55,7 @@ konfig = {
     "kanal_mq3": 0,
     "ile_probek_kalibracja": 150,
     "przelicznik_promili": 220.0,
-    "czas_dmuchania": 2.0,
+    "czas_dmuchania": 1.0,
 
     # Progi
     "prog_trzezwosci": 0.2,
@@ -102,7 +102,7 @@ konfig = {
     "kanal_mikrofonu": 2,
     "min_odleglosc": 8.0,
     "max_odleglosc": 20.0,
-    "prog_glosnosci": 500,
+    "prog_glosnosci": 600,
     "probki_mikrofonu": 64,
 
     # Mail
