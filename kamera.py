@@ -2,12 +2,12 @@ import numpy as np
 from picamera2 import Picamera2
 
 
-class camera:
+class Kamera:
 
-    def __init__(self, szer: int, wys: int, rotate_dir: str):
+    def __init__(self, szer: int, wys: int, kierunekObrotu: str):
         import cv2 
 
-        self.obrot = rotate_dir
+        self.kierunekObrotu = kierunekObrotu
         self.probkiKamera = Picamera2()
 
         cfg = self.probkiKamera.create_preview_configuration(
@@ -16,14 +16,14 @@ class camera:
         self.probkiKamera.configure(cfg)
         self.probkiKamera.start()
 
-    def loadklatka_cam(self):
+    def wez_klatke(self):
         klatka = self.probkiKamera.capture_array("main")
 
-        if self.obrot == "cw":
+        if self.kierunekObrotu == "cw":
             klatka = np.rot90(klatka, 3)
-        elif self.obrot == "ccw":
+        elif self.kierunekObrotu == "ccw":
             klatka = np.rot90(klatka, 1)
-        elif self.obrot == "180":
+        elif self.kierunekObrotu == "180":
             klatka = np.rot90(klatka, 2)
         return klatka
 

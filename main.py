@@ -19,73 +19,73 @@ from email import encoders
 from PyQt5 import QtCore, QtGui, QtWidgets
 import RPi.GPIO as GPIO
 
-from config import config
-from helper import katalogiverify, czas, dopiszCsv
-from czujnikiSPI import mcp3008, MQ3
-from detektorTwarzy import detektorTwarzy
-from kamera import camera
-from klawiatura import Pin_okno
+from konfiguracja import konfig
+from fs_pomoc import sprawdzKatalogi, aktualnyCzas, zapiszDoPlikuCsv
+from czujnikspi import Mcp3008, CzujnikMQ3
+from baza_twarzy import BazaTwarzy
+from kamera import Kamera
+from oknoPin import OknoPin
 
 try:
     from pymongo import MongoClient
 except Exception:
     MongoClient = None
 
-_MONGO_CLIENT = None
+_KLIENT_MONGO = None
 
 
-def jakoscTwarzy(szare_roi):
+def jakosc_twarzy(szare_roi):
     ostrosc = cv2.Laplacian(szare_roi, cv2.CV_64F).var()
     jasnosc = float(np.mean(szare_roi))
     ok = (
-        ostrosc >= config["minOstroscProbki"]
-        and config["minJasnoscProbki"] <= jasnosc <= config["maxJasnoscProbki"]
+        ostrosc >= konfig["min_ostrosc"]
+        and konfig["min_jasnosc"] <= jasnosc <= konfig["max_jasnosc"]
     )
     return ok, ostrosc, jasnosc
 
 
-class MainWindow(QtWidgets.QMainWindow):
+class GlowneOkno(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
-        katalogiverify()
+        sprawdzKatalogi()
 
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
-        GPIO.setup(config["PinFurtka"], GPIO.OUT, initial=GPIO.LOW)
-        GPIO.setup(config["Pin_LED_otwarcie"], GPIO.OUT, initial=GPIO.LOW)
-        GPIO.setup(config["Pin_LED_odmowa"], GPIO.OUT, initial=GPIO.LOW)
+        GPIO.setup(konfig["pin_furtki"], GPIO.OUT, initial=GPIO.LOW)
+        GPIO.setup(konfig["pin_led_zielony"], GPIO.OUT, initial=GPIO.LOW)
+        GPIO.setup(konfig["pin_led_czerwony"], GPIO.OUT, initial=GPIO.LOW)
 
-        self.adc = mcp3008(config["spi"], config["spi_device"])
-        self.mq3 = MQ3(
+        self.adc = Mcp3008(konfig["spi_kanal"], konfig["spi_urzadzenie"])
+        self.mq3 = CzujnikMQ3(
             self.adc,
-            config["mq3_kanal"],
-            config["promile_prog_probki"],
-            config["wspolczynnikPromile"],
+            konfig["kanal_mq3"],
+            konfig["ile_probek_kalibracja"],
+            konfig["przelicznik_promili"],
         )
 
-        self.twarzeDb = detektorTwarzy(
-            config["katalogTwarze"],
-            config["katalogIndex"],
-            config["pracownicyListajson"],
+        self.baza_twarzy = BazaTwarzy(
+            konfig["folder_twarze"],
+            konfig["folder_indeks"],
+            konfig["plik_pracownicy"],
         )
-        prac_start = config["pracownikStartowy"]
-        self.twarzeDb.Czynowy_pracownik(
+        prac_start = konfig["pracownik_startowy"]
+        self.baza_twarzy.dodajNowego(
             prac_start["id"], prac_start["imie"], prac_start["pin"]
         )
 
         try:
-            self.syncPracownikowSerwer()
+            self.synchronizuj_pracownikow()
         except Exception as e:
             print(f"[SYNC] Błąd sync przy starcie: {e}")
 
         self.setWindowTitle("Alkotester - Raspberry Pi")
 
-        if config["SchowajKursor"]:
+        if konfig["ukryj_myszke"]:
             self.setCursor(QtCore.Qt.BlankCursor)
 
-        print(f"[MongoDebug] config['mongo_uri'] = {config.get('mongo_uri')}")
-        print(f"[MongoDebug] config['baza_mongodb'] = {config.get('baza_mongodb')}")
+        print(f"[MongoDebug] konfig['mongo_uri'] = {konfig.get('mongo_uri')}")
+        print(f"[MongoDebug] konfig['nazwa_bazy_mongo'] = {konfig.get('nazwa_bazy_mongo')}")
 
         centralny = QtWidgets.QWidget()
         self.setCentralWidget(centralny)
@@ -93,49 +93,49 @@ class MainWindow(QtWidgets.QMainWindow):
         uklad_zew.setContentsMargins(0, 0, 0, 0)
         uklad_zew.setSpacing(0)
 
-        self.view = QtWidgets.QLabel()
-        self.view.setAlignment(QtCore.Qt.AlignCenter)
-        self.view.setStyleSheet("background:black;")
-        self.view.setSizePolicy(
+        self.widok = QtWidgets.QLabel()
+        self.widok.setAlignment(QtCore.Qt.AlignCenter)
+        self.widok.setStyleSheet("background:black;")
+        self.widok.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding,
             QtWidgets.QSizePolicy.Expanding,
         )
-        uklad_zew.addWidget(self.view, 1)
+        uklad_zew.addWidget(self.widok, 1)
 
-        self.overlay = QtWidgets.QFrame()
-        self.overlay.setFixedHeight(config["wysokoscUI"])
-        self.overlay.setStyleSheet("background: rgba(0,0,0,110); color:white;")
+        self.nakladka = QtWidgets.QFrame()
+        self.nakladka.setFixedHeight(konfig["wysokosc_paska"])
+        self.nakladka.setStyleSheet("background: rgba(0,0,0,110); color:white;")
 
-        uklad_overlay = QtWidgets.QVBoxLayout(self.overlay)
+        uklad_overlay = QtWidgets.QVBoxLayout(self.nakladka)
         uklad_overlay.setContentsMargins(16, 12, 16, 12)
         uklad_overlay.setSpacing(8)
 
         gorny_rzad = QtWidgets.QHBoxLayout()
         gorny_rzad.setContentsMargins(0, 0, 0, 0)
         gorny_rzad.setSpacing(8)
-        self.lbl_gora = QtWidgets.QLabel("")
-        self.lbl_gora.setStyleSheet("color:white; font-size:28px; font-weight:600;")
-        gorny_rzad.addWidget(self.lbl_gora)
+        self.etykieta_gora = QtWidgets.QLabel("")
+        self.etykieta_gora.setStyleSheet("color:white; font-size:28px; font-weight:600;")
+        gorny_rzad.addWidget(self.etykieta_gora)
         gorny_rzad.addStretch(1)
-        self.btn_gosc = QtWidgets.QPushButton("Gość")
-        self.btn_gosc.setStyleSheet(
+        self.guzik_gosc = QtWidgets.QPushButton("Gość")
+        self.guzik_gosc.setStyleSheet(
             "font-size:20px; padding:6px 12px; border-radius:12px; "
             "background:#6a1b9a; color:white;"
         )
-        self.btn_gosc.clicked.connect(self.GoscPrzycisk)
-        gorny_rzad.addWidget(self.btn_gosc)
+        self.guzik_gosc.clicked.connect(self.klik_gosc)
+        gorny_rzad.addWidget(self.guzik_gosc)
         uklad_overlay.addLayout(gorny_rzad)
 
         self.stos_srodek = QtWidgets.QStackedLayout()
         self.stos_srodek.setContentsMargins(0, 0, 0, 0)
         self.stos_srodek.setSpacing(0)
 
-        self.lbl_srodek = QtWidgets.QLabel("")
-        self.lbl_srodek.setAlignment(QtCore.Qt.AlignCenter)
-        self.lbl_srodek.setStyleSheet(
+        self.etykieta_srodek = QtWidgets.QLabel("")
+        self.etykieta_srodek.setAlignment(QtCore.Qt.AlignCenter)
+        self.etykieta_srodek.setStyleSheet(
             "color:white; font-size:36px; font-weight:700;"
         )
-        self.stos_srodek.addWidget(self.lbl_srodek)  # index 0
+        self.stos_srodek.addWidget(self.etykieta_srodek)  # index 0
 
         self.pasek_postepu = QtWidgets.QProgressBar()
         self.pasek_postepu.setRange(0, 100)
@@ -163,28 +163,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stos_srodek.addWidget(self.kontener_postepu)
 
         uklad_overlay.addLayout(self.stos_srodek, 1)
-        self.stos_srodek.setCurrentWidget(self.lbl_srodek)
+        self.stos_srodek.setCurrentWidget(self.etykieta_srodek)
 
         rzad_przyciski = QtWidgets.QHBoxLayout()
         rzad_przyciski.setSpacing(12)
 
-        self.btn_glowny = QtWidgets.QPushButton("Ponów pomiar")
-        self.btn_glowny.setStyleSheet(
+        self.guzik_glowny = QtWidgets.QPushButton("Ponów pomiar")
+        self.guzik_glowny.setStyleSheet(
             "font-size:24px; padding:12px 18px; border-radius:16px; "
             "background:#2e7d32; color:white;"
         )
 
-        self.btn_pomocniczy = QtWidgets.QPushButton("Wprowadź PIN")
-        self.btn_pomocniczy.setStyleSheet(
+        self.guzik_pomocniczy = QtWidgets.QPushButton("Wprowadź PIN")
+        self.guzik_pomocniczy.setStyleSheet(
             "font-size:24px; padding:12px 18px; border-radius:16px; "
             "background:#1565c0; color:white;"
         )
 
-        rzad_przyciski.addWidget(self.btn_glowny)
-        rzad_przyciski.addWidget(self.btn_pomocniczy)
+        rzad_przyciski.addWidget(self.guzik_glowny)
+        rzad_przyciski.addWidget(self.guzik_pomocniczy)
         uklad_overlay.addLayout(rzad_przyciski)
 
-        uklad_zew.addWidget(self.overlay, 0)
+        uklad_zew.addWidget(self.nakladka, 0)
 
         # STAN I ZMIENNE ROBOCZE
         self.stan = "START"
@@ -214,55 +214,55 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.akcja_po_treningu = None
 
-        self.kanal_odleglosc = config.get("odleglosc_kanal")
-        self.kanal_mikrofon = config.get("mikrofon_kanal")
-        self.odleglosc_min_cm = config.get("minOdleglosc")
-        self.odleglosc_max_cm = config.get("maxOdleglosc")
-        self.prog_mikrofonu = config.get("prog_mikrofonu")
+        self.kanal_odleglosc = konfig.get("kanal_odleglosci")
+        self.kanal_mikrofon = konfig.get("kanal_mikrofonu")
+        self.odleglosc_min_cm = konfig.get("min_odleglosc")
+        self.odleglosc_max_cm = konfig.get("max_odleglosc")
+        self.prog_mikrofonu = konfig.get("prog_glosnosci")
 
         self.czas_dmuchania = 0.0
         self.czy_gosc = False
 
-        self.kamera = camera(
-            config["rozdzielczoscKamery"][0],
-            config["rozdzielczoscKamery"][1],
-            config["obrotKamera"],
+        self.kamera = Kamera(
+            konfig["rozdzialka_kamery"][0],
+            konfig["rozdzialka_kamery"][1],
+            konfig["kierunek_obrotu"],
         )
 
         self.timer_kamery = QtCore.QTimer(self)
-        self.timer_kamery.timeout.connect(self.tickKamera)
-        self.timer_kamery.start(int(1000 / max(1, config["fps"])))
+        self.timer_kamery.timeout.connect(self.cykl_kamery)
+        self.timer_kamery.start(int(1000 / max(1, konfig["klatki_na_sekunde"])))
 
         self.timer_twarzy = QtCore.QTimer(self)
-        self.timer_twarzy.timeout.connect(self.tickTwarz)
+        self.timer_twarzy.timeout.connect(self.cykl_twarzy)
 
         self.timer_interfejsu = QtCore.QTimer(self)
-        self.timer_interfejsu.timeout.connect(self.tickInterfejs)
+        self.timer_interfejsu.timeout.connect(self.cykl_interfejsu)
 
         self.timer_rozpoznany = QtCore.QTimer(self)
-        self.timer_rozpoznany.timeout.connect(self.tickRozpoznany)
+        self.timer_rozpoznany.timeout.connect(self.cykl_rozpoznany)
 
         self.timer_pomiaru = QtCore.QTimer(self)
         self.timer_pomiaru.timeout.connect(self.pomiar)
 
         self.timer_sync = QtCore.QTimer(self)
-        self.timer_sync.timeout.connect(self.tick_sync)
+        self.timer_sync.timeout.connect(self.cykl_synchronizacji)
         self.timer_sync.start(1 * 60 * 1000)
 
-        self.btn_glowny.clicked.connect(self.przycisk1)
-        self.btn_pomocniczy.clicked.connect(self.przycisk2)
+        self.guzik_glowny.clicked.connect(self.klik_guzik1)
+        self.guzik_pomocniczy.clicked.connect(self.klik_guzik2)
 
-        self.setKomunikat(
+        self.ustaw_komunikat(
             "Proszę czekać…",
             "Kalibracja czujnika MQ-3 w toku",
             color="white",
         )
-        self.pokaz_przyciski(primary_text=None, secondary_text=None)
+        self.pokaz_guziki(primary_text=None, secondary_text=None)
 
         self.stan_kalibracjamq3()
 
 
-    def kadrZoomPrzyciecie(self, img, target_w, target_h):
+    def kadr_zoom_przyciecie(self, img, target_w, target_h):
         if img is None or target_w <= 0 or target_h <= 0:
             return None
 
@@ -296,17 +296,17 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         return zmienione
 
-    def syncPracownikowSerwer(self):
-        baza_url = config.get("urlrender")
-        token = config.get("token")
-        sciezka_prac = config.get("pracownicyListajson", "dane/pracownicy.json")
+    def synchronizuj_pracownikow(self):
+        baza_url = konfig.get("url_bazy_render")
+        token = konfig.get("haslo")
+        sciezka_prac = konfig.get("plik_pracownicy", "dane/pracownicy.json")
 
         if not os.path.isabs(sciezka_prac):
             katalog_biez = os.path.dirname(os.path.abspath(__file__))
             sciezka_prac = os.path.join(katalog_biez, sciezka_prac)
 
         if not baza_url:
-            print("[SYNC] Brak urlrender w config - pomijam sync.")
+            print("[SYNC] Brak url_bazy_render w config - pomijam sync.")
             return
 
         url = f"{baza_url.rstrip('/')}/api/pracownicy_public"
@@ -338,7 +338,7 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"[SYNC] Zapisano {len(lista_prac)} pracowników do {sciezka_prac}")
 
             try:
-                self.twarzeDb.wczytajPracownikow()
+                self.baza_twarzy.wczytajPracownikow()
                 print("[SYNC] FaceDB przeładowany.")
             except Exception as e:
                 print(f"[SYNC] Błąd przeładowania FaceDB: {e}")
@@ -346,7 +346,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"[SYNC] Błąd pobierania z serwera: {e}")
 
-    def douczTwarz(self, id_prac: str):
+    def doucz_twarz(self, id_prac: str):
         try:
             if self.ostatni_obrys_twarzy is None:
                 return
@@ -373,28 +373,28 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
             twarz_szara = cv2.cvtColor(twarz_bgr, cv2.COLOR_BGR2GRAY)
-            ok_q, ostrosc, jasnosc = jakoscTwarzy(twarz_szara)
+            ok_q, ostrosc, jasnosc = jakosc_twarzy(twarz_szara)
             if not ok_q:
                 return
 
-            self.twarzeDb.nowaprobkaTWARZY(id_prac, twarz_bgr)
+            self.baza_twarzy.dodajProbke(id_prac, twarz_bgr)
         except Exception:
             pass
 
-    def tick_sync(self):
+    def cykl_synchronizacji(self):
         try:
-            self.syncPracownikowSerwer()
+            self.synchronizuj_pracownikow()
         except Exception as e:
             print(f"[SYNC] Błąd okresowego sync-a: {e}")
 
-    def stopTimer(self, obiekt_timera: QtCore.QTimer):
+    def zatrzymaj_timer(self, obiekt_timera: QtCore.QTimer):
         try:
             if obiekt_timera.isActive():
                 obiekt_timera.stop()
         except Exception:
             pass
 
-    def setKomunikat(self, tekst_gora, tekst_srodek=None, color="white", use_center=True):
+    def ustaw_komunikat(self, tekst_gora, tekst_srodek=None, color="white", use_center=True):
         if color == "green":
             kolor_css = "#00ff00"
         elif color == "red":
@@ -402,33 +402,33 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             kolor_css = "white"
 
-        self.lbl_gora.setText(tekst_gora)
-        self.lbl_gora.setStyleSheet(
+        self.etykieta_gora.setText(tekst_gora)
+        self.etykieta_gora.setStyleSheet(
             f"color:{kolor_css}; font-size:28px; font-weight:600;"
         )
         if use_center:
-            self.lbl_srodek.setText(tekst_srodek or "")
-            self.lbl_srodek.setStyleSheet(
+            self.etykieta_srodek.setText(tekst_srodek or "")
+            self.etykieta_srodek.setStyleSheet(
                 f"color:{kolor_css}; font-size:36px; font-weight:700;"
             )
             if hasattr(self, "stos_srodek"):
-                self.stos_srodek.setCurrentWidget(self.lbl_srodek)
+                self.stos_srodek.setCurrentWidget(self.etykieta_srodek)
 
-    def pokaz_przyciski(self, primary_text=None, secondary_text=None):
+    def pokaz_guziki(self, primary_text=None, secondary_text=None):
         if primary_text is None:
-            self.btn_glowny.hide()
+            self.guzik_glowny.hide()
         else:
-            self.btn_glowny.setText(primary_text)
-            self.btn_glowny.show()
+            self.guzik_glowny.setText(primary_text)
+            self.guzik_glowny.show()
 
         if secondary_text is None:
-            self.btn_pomocniczy.hide()
+            self.guzik_pomocniczy.hide()
         else:
-            self.btn_pomocniczy.setText(secondary_text)
-            self.btn_pomocniczy.show()
+            self.guzik_pomocniczy.setText(secondary_text)
+            self.guzik_pomocniczy.show()
 
 
-    def brakDzialania(self):
+    def bezczynnosc(self):
         self.stan = "BEZCZYNNOSC"
         self.id_pracownika_biezacego = None
         self.nazwa_pracownika_biezacego = None
@@ -452,54 +452,54 @@ class MainWindow(QtWidgets.QMainWindow):
         self.pasek_postepu.hide()
 
         self.timer_interfejsu.start(250)
-        self.timer_twarzy.start(config["czestotliwoscDetekcji"])
-        self.stopTimer(self.timer_rozpoznany)
-        self.stopTimer(self.timer_pomiaru)
+        self.timer_twarzy.start(konfig["co_ile_detekcja"])
+        self.zatrzymaj_timer(self.timer_rozpoznany)
+        self.zatrzymaj_timer(self.timer_pomiaru)
 
-        self.setKomunikat(czas(), "Podejdź bliżej", color="white")
-        self.pokaz_przyciski(primary_text=None, secondary_text="Wprowadź PIN")
+        self.ustaw_komunikat(aktualnyCzas(), "Podejdź bliżej", color="white")
+        self.pokaz_guziki(primary_text=None, secondary_text="Wprowadź PIN")
 
         if hasattr(self, "stos_srodek"):
-            self.stos_srodek.setCurrentWidget(self.lbl_srodek)
+            self.stos_srodek.setCurrentWidget(self.etykieta_srodek)
 
-    def przejscieDetekcja(self):
+    def tryb_detekcja(self):
         self.stan = "DETEKCJA"
         self.licznik_nieudanych_detekcji = 0
         self.stabilne_id_pracownika = None
         self.licznik_stabilnych_probek = 0
 
         self.timer_interfejsu.start(250)
-        self.timer_twarzy.start(config["czestotliwoscDetekcji"])
-        self.stopTimer(self.timer_rozpoznany)
-        self.stopTimer(self.timer_pomiaru)
+        self.timer_twarzy.start(konfig["co_ile_detekcja"])
+        self.zatrzymaj_timer(self.timer_rozpoznany)
+        self.zatrzymaj_timer(self.timer_pomiaru)
 
-        self.setKomunikat(czas(), "Szukam twarzy…", color="white")
-        self.pokaz_przyciski(primary_text=None, secondary_text="Wprowadź PIN")
+        self.ustaw_komunikat(aktualnyCzas(), "Szukam twarzy…", color="white")
+        self.pokaz_guziki(primary_text=None, secondary_text="Wprowadź PIN")
 
-    def doWpisaniaPIN(self):
+    def tryb_wpisywania_pinu(self):
         self.stan = "PIN_WPROWADZANIE"
-        self.stopTimer(self.timer_twarzy)
-        self.stopTimer(self.timer_interfejsu)
-        self.stopTimer(self.timer_rozpoznany)
-        self.stopTimer(self.timer_pomiaru)
+        self.zatrzymaj_timer(self.timer_twarzy)
+        self.zatrzymaj_timer(self.timer_interfejsu)
+        self.zatrzymaj_timer(self.timer_rozpoznany)
+        self.zatrzymaj_timer(self.timer_pomiaru)
         try:
             print("[SYNC] Ręczny sync przed wprowadzeniem PIN-u...")
-            self.syncPracownikowSerwer()
+            self.synchronizuj_pracownikow()
         except Exception as e:
             print(f"[SYNC] Błąd sync przy wprowadzaniu PIN: {e}")
 
-        dlg = Pin_okno(self, title="Wprowadź PIN")
-        if dlg.exec() == QtWidgets.QDialog.Accepted:
-            pin = dlg.cyfryPin()
+        dlg = OknoPin(self, title="Wprowadź PIN")
+        if dlg.exec_() == QtWidgets.QDialog.Accepted:
+            pin = dlg.wezPin()
             try:
-                self.twarzeDb.wczytajPracownikow()
+                self.baza_twarzy.wczytajPracownikow()
             except Exception:
                 pass
-            wpis = self.twarzeDb.emp_by_pin.get(pin)
+            wpis = self.baza_twarzy.emp_by_pin.get(pin)
             if not wpis:
-                self.setKomunikat("Zły PIN - brak danych", "", color="red")
-                self.pokaz_przyciski(primary_text=None, secondary_text=None)
-                QtCore.QTimer.singleShot(2000, self.brakDzialania)
+                self.ustaw_komunikat("Zły PIN - brak danych", "", color="red")
+                self.pokaz_guziki(primary_text=None, secondary_text=None)
+                QtCore.QTimer.singleShot(2000, self.bezczynnosc)
                 return
 
             self.id_pracownika_biezacego = wpis.get("id")
@@ -508,38 +508,38 @@ class MainWindow(QtWidgets.QMainWindow):
 
             self.zbieranieprobek_dla_pracownika()
         else:
-            self.brakDzialania()
+            self.bezczynnosc()
 
-    def doponowdetekcje(self):
+    def tryb_ponowna_detekcja(self):
         self.stan = "DETEKCJA_PONOWNA"
         self.licznik_prob_ponownej_detekcji = 0
 
-        self.timer_twarzy.start(config["czestotliwoscDetekcji"])
-        self.stopTimer(self.timer_interfejsu)
-        self.stopTimer(self.timer_rozpoznany)
-        self.stopTimer(self.timer_pomiaru)
+        self.timer_twarzy.start(konfig["co_ile_detekcja"])
+        self.zatrzymaj_timer(self.timer_interfejsu)
+        self.zatrzymaj_timer(self.timer_rozpoznany)
+        self.zatrzymaj_timer(self.timer_pomiaru)
 
-        self.setKomunikat(
+        self.ustaw_komunikat(
             "Sprawdzam twarz…", self.nazwa_pracownika_biezacego or "", color="white"
         )
-        self.pokaz_przyciski(primary_text=None, secondary_text=None)
+        self.pokaz_guziki(primary_text=None, secondary_text=None)
 
-    def przejscieRozpoznany(self):
+    def tryb_rozpoznany(self):
         self.stan = "OCZEKIWANIE_POMIAR"
 
         self.kalibracja_dobra_twarz = False
         self.kalibracja_widoczna_twarz = False
 
-        self.timer_twarzy.start(config["czestotliwoscDetekcji"])
+        self.timer_twarzy.start(konfig["co_ile_detekcja"])
 
-        self.stopTimer(self.timer_interfejsu)
-        self.stopTimer(self.timer_pomiaru)
-        self.stopTimer(self.timer_rozpoznany)
+        self.zatrzymaj_timer(self.timer_interfejsu)
+        self.zatrzymaj_timer(self.timer_pomiaru)
+        self.zatrzymaj_timer(self.timer_rozpoznany)
 
         self.timer_rozpoznany.start(200)
 
         imie = self.nazwa_pracownika_biezacego or ""
-        odleglosc_cm = self.sczytaj_odl()
+        odleglosc_cm = self.odczytaj_odleglosc()
         if odleglosc_cm == float("inf"):
             tekst_odleglosc = "brak odczytu"
         elif odleglosc_cm > 80:
@@ -549,10 +549,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         tekst_gora = "Podejdź bliżej"
         tekst_srodek = f"Cześć {imie}\nOdległość: {tekst_odleglosc}"
-        self.setKomunikat(tekst_gora, tekst_srodek, color="white")
-        self.pokaz_przyciski(primary_text=None, secondary_text=None)
+        self.ustaw_komunikat(tekst_gora, tekst_srodek, color="white")
+        self.pokaz_guziki(primary_text=None, secondary_text=None)
 
-    def przejscieDoPomiaru(self):
+    def tryb_pomiaru(self):
         self.stan = "POMIAR"
         self.lista_probek_pomiarowych = []
         self.czas_dmuchania = 0.0
@@ -560,9 +560,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ostatni_obrys_twarzy = None
         self.ostatnia_pewnosc = 0.0
 
-        self.stopTimer(self.timer_twarzy)
-        self.stopTimer(self.timer_interfejsu)
-        self.stopTimer(self.timer_rozpoznany)
+        self.zatrzymaj_timer(self.timer_twarzy)
+        self.zatrzymaj_timer(self.timer_interfejsu)
+        self.zatrzymaj_timer(self.timer_rozpoznany)
 
         self.pasek_postepu.setValue(0)
         self.pasek_postepu.show()
@@ -571,34 +571,34 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.timer_pomiaru.start(100)
 
-        self.setKomunikat("Przeprowadzam pomiar…", "", color="white", use_center=False)
-        self.pokaz_przyciski(primary_text=None, secondary_text=None)
+        self.ustaw_komunikat("Przeprowadzam pomiar…", "", color="white", use_center=False)
+        self.pokaz_guziki(primary_text=None, secondary_text=None)
 
     @QtCore.pyqtSlot()
-    def pomiar_koniec(self):
+    def koniec_pomiaru(self):
         promille = getattr(self, "_oczekujace_promile", 0.0)
         self.werdykt(promille)
 
     def werdykt(self, promille):
         self.pasek_postepu.hide()
         if hasattr(self, "stos_srodek"):
-            self.stos_srodek.setCurrentWidget(self.lbl_srodek)
-            self.lbl_srodek.setWordWrap(True)
+            self.stos_srodek.setCurrentWidget(self.etykieta_srodek)
+            self.etykieta_srodek.setWordWrap(True)
 
         self.ostatni_wynik_promile = float(promille)
 
         try:
-            prog_ok = float(config.get("dolnyProgPromil", 0.0))
+            prog_ok = float(konfig.get("prog_trzezwosci", 0.0))
         except Exception:
             prog_ok = 0.0
         try:
-            prog_odmowa = float(config.get("ProgPromilOdmowa", 0.5))
+            prog_odmowa = float(konfig.get("prog_pijany", 0.5))
         except Exception:
             prog_odmowa = 0.5
 
         if prog_ok > prog_odmowa:
             print(
-                f"[WARN] dolnyProgPromil ({prog_ok}) > ProgPromilOdmowa ({prog_odmowa})"
+                f"[WARN] prog_trzezwosci ({prog_ok}) > prog_pijany ({prog_odmowa})"
             )
             prog_ok, prog_odmowa = prog_odmowa, prog_ok
 
@@ -609,10 +609,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         tekst_pomiar = f"Pomiar: {self.ostatni_wynik_promile:.3f} [‰]"
 
-        self.stopTimer(self.timer_twarzy)
-        self.stopTimer(self.timer_interfejsu)
-        self.stopTimer(self.timer_rozpoznany)
-        self.stopTimer(self.timer_pomiaru)
+        self.zatrzymaj_timer(self.timer_twarzy)
+        self.zatrzymaj_timer(self.timer_interfejsu)
+        self.zatrzymaj_timer(self.timer_rozpoznany)
+        self.zatrzymaj_timer(self.timer_pomiaru)
 
         wynik_ok = False
         trzeba_powtorzyc = False
@@ -630,38 +630,38 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if wynik_ok and not trzeba_powtorzyc:
             self.stan = "DECYZJA_OK"
-            self.setKomunikat(tekst_pomiar, "Przejście otwarte", color="green")
-            self.pokaz_przyciski(primary_text=None, secondary_text=None)
-            self.sygnalBramka_mongo(True, self.ostatni_wynik_promile)
-            self.LED(True)
-            QtCore.QTimer.singleShot(2500, self.brakDzialania)
+            self.ustaw_komunikat(tekst_pomiar, "Przejście otwarte", color="green")
+            self.pokaz_guziki(primary_text=None, secondary_text=None)
+            self.sygnal_bramka_mongo(True, self.ostatni_wynik_promile)
+            self.dioda_led(True)
+            QtCore.QTimer.singleShot(2500, self.bezczynnosc)
             return
 
         if trzeba_powtorzyc:
             self.stan = "PONOW_POMIAR"
-            self.setKomunikat(
+            self.ustaw_komunikat(
                 tekst_pomiar,
                 "Ponów pomiar",
                 color="red",
             )
-            self.pokaz_przyciski(
+            self.pokaz_guziki(
                 primary_text="Ponów pomiar", secondary_text="Odmowa"
             )
             return
 
         self.stan = "DECYZJA_ODMOWA"
-        self.setKomunikat(tekst_pomiar, "Odmowa", color="red")
-        self.pokaz_przyciski(primary_text=None, secondary_text=None)
-        self.sygnalBramka_mongo(False, self.ostatni_wynik_promile)
-        self.LED(False)
-        QtCore.QTimer.singleShot(3000, self.brakDzialania)
+        self.ustaw_komunikat(tekst_pomiar, "Odmowa", color="red")
+        self.pokaz_guziki(primary_text=None, secondary_text=None)
+        self.sygnal_bramka_mongo(False, self.ostatni_wynik_promile)
+        self.dioda_led(False)
+        QtCore.QTimer.singleShot(3000, self.bezczynnosc)
 
-    def tickRozpoznany(self):
+    def cykl_rozpoznany(self):
         if self.stan != "OCZEKIWANIE_POMIAR":
-            self.stopTimer(self.timer_rozpoznany)
+            self.zatrzymaj_timer(self.timer_rozpoznany)
             return
 
-        odleglosc_cm = self.sczytaj_odl()
+        odleglosc_cm = self.odczytaj_odleglosc()
         imie = self.nazwa_pracownika_biezacego or ""
         if odleglosc_cm > 70:
             tekst_odleglosc = ">1m"
@@ -670,21 +670,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.odleglosc_min_cm <= odleglosc_cm <= self.odleglosc_max_cm:
             if self.kalibracja_dobra_twarz or self.flaga_pin_zapasowy:
-                self.stopTimer(self.timer_rozpoznany)
+                self.zatrzymaj_timer(self.timer_rozpoznany)
                 tekst_gora = "Nie ruszaj się - start pomiaru"
                 tekst_srodek = f"Cześć {imie}\nOdległość: {tekst_odleglosc}"
-                self.setKomunikat(tekst_gora, tekst_srodek, color="white")
-                self.przejscieDoPomiaru()
+                self.ustaw_komunikat(tekst_gora, tekst_srodek, color="white")
+                self.tryb_pomiaru()
                 return
             else:
-                self.setKomunikat(
+                self.ustaw_komunikat(
                     "Stań przodem do kamery",
                     f"Cześć {imie}\nOdległość: {tekst_odleglosc}",
                     color="white",
                 )
                 return
 
-        self.setKomunikat(
+        self.ustaw_komunikat(
             "Podejdź bliżej",
             f"Cześć {imie}\nOdległość: {tekst_odleglosc}",
             color="white",
@@ -692,7 +692,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def pomiar(self):
         if self.stan != "POMIAR":
-            self.stopTimer(self.timer_pomiaru)
+            self.zatrzymaj_timer(self.timer_pomiaru)
             return
 
         try:
@@ -700,9 +700,9 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             dt = 0.1
 
-        odleglosc_cm = self.sczytaj_odl()
-        amp, _ = self.czyt_ampMikro(
-            samples=config.get("mikrofonAmpIloscProbek", 32)
+        odleglosc_cm = self.odczytaj_odleglosc()
+        amp, _ = self.odczytaj_mikrofon(
+            samples=konfig.get("probki_mikrofonu", 32)
         )
 
         dmuchanie_wykryte = (
@@ -713,12 +713,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if dmuchanie_wykryte:
             self.czas_dmuchania += dt
             try:
-                self.lista_probek_pomiarowych.append(self.mq3.wartoscmcp3008())
+                self.lista_probek_pomiarowych.append(self.mq3.pobierz())
             except Exception:
                 pass
 
         postep = max(
-            0.0, min(self.czas_dmuchania / config["czas_pomiaru"], 1.0)
+            0.0, min(self.czas_dmuchania / konfig["czas_dmuchania"], 1.0)
         )
         self.pasek_postepu.setValue(int(postep * 100))
         self.pasek_postepu.show()
@@ -727,81 +727,81 @@ class MainWindow(QtWidgets.QMainWindow):
             self.stos_srodek.setCurrentWidget(self.kontener_postepu)
 
         if dmuchanie_wykryte:
-            self.setKomunikat(
+            self.ustaw_komunikat(
                 "Przeprowadzam pomiar…", "", color="white", use_center=False
             )
         else:
             if not (
                 self.odleglosc_min_cm <= odleglosc_cm <= self.odleglosc_max_cm
             ):
-                self.setKomunikat(
+                self.ustaw_komunikat(
                     "Podejdź bliżej", "", color="white", use_center=False
                 )
             else:
-                self.setKomunikat("Dmuchaj", "", color="white", use_center=False)
+                self.ustaw_komunikat("Dmuchaj", "", color="white", use_center=False)
 
-        if self.czas_dmuchania >= config["czas_pomiaru"]:
-            self.stopTimer(self.timer_pomiaru)
+        if self.czas_dmuchania >= konfig["czas_dmuchania"]:
+            self.zatrzymaj_timer(self.timer_pomiaru)
             probki = list(self.lista_probek_pomiarowych)
 
             def watek():
                 try:
-                    promille = float(self.mq3.promilzprobek(probki))
+                    promille = float(self.mq3.promile(probki))
                 except Exception as e:
                     print(f"[POMIAR] błąd liczenia promili: {e}")
                     promille = 0.0
                 self._oczekujace_promile = promille
                 QtCore.QMetaObject.invokeMethod(
                     self,
-                    "pomiar_koniec",
+                    "koniec_pomiaru",
                     QtCore.Qt.QueuedConnection,
                 )
 
             threading.Thread(target=watek, daemon=True).start()
 
-    def przycisk1(self):
+    def klik_guzik1(self):
         if self.stan == "PONOW_POMIAR":
             if self.licznik_ponownych_pomiarow >= 1:
                 return
             self.licznik_ponownych_pomiarow += 1
-            self.przejscieDoPomiaru()
+            self.tryb_pomiaru()
 
         elif self.stan == "PIN_NIEUDANY_WYBOR":
             self.flaga_pin_zapasowy = True
-            self.przejscieRozpoznany()
+            self.tryb_rozpoznany()
 
-    def przycisk2(self):
+    def klik_guzik2(self):
         if self.stan == "PONOW_POMIAR":
-            self.setKomunikat("Odmowa", "", color="red")
-            self.sygnalBramka_mongo(False, self.ostatni_wynik_promile)
-            self.LED(False)
-            self.pokaz_przyciski(primary_text=None, secondary_text=None)
-            QtCore.QTimer.singleShot(2000, self.brakDzialania)
+            self.ustaw_komunikat("Odmowa", "", color="red")
+            self.sygnal_bramka_mongo(False, self.ostatni_wynik_promile)
+            self.dioda_led(False)
+            self.pokaz_guziki(primary_text=None, secondary_text=None)
+            QtCore.QTimer.singleShot(2000, self.bezczynnosc)
             return
 
         if self.stan == "PIN_NIEUDANY_WYBOR":
-            self.brakDzialania()
+            self.bezczynnosc()
             return
 
         if self.stan in ("BEZCZYNNOSC", "DETEKCJA"):
-            self.doWpisaniaPIN()
+            self.tryb_wpisywania_pinu()
 
-    def zbieranieprobek_dla_pracownika(self):
+    def zbieranie_probek_pracownika(self):
         id_prac = self.id_pracownika_biezacego
         if not id_prac:
-            self.brakDzialania()
+            self.bezczynnosc()
             return
 
-        ile_potrzeba = config["ileZdjecTrening"]
-        timeout_s = config["CzasTrening"]
+        ile_potrzeba = konfig["ile_fotek_trening"]
+        timeout_s = konfig["czas_na_trening"]
         deadline = time.time() + timeout_s
 
-        self.setKomunikat(
+        self.ustaw_komunikat(
             "Przytrzymaj twarz w obwódce",
             f"Zbieram próbki 0/{ile_potrzeba}",
             color="white",
         )
-        self.pokaz_przyciski(primary_text=None, secondary_text=None)
+        self.pokaz_guziki(primary_text=None, secondary_text=None)
 
         zapisane = 0
         lista_obrazow = []
@@ -812,12 +812,12 @@ class MainWindow(QtWidgets.QMainWindow):
             if time.time() > deadline:
                 self.ostatni_obrys_twarzy = None
                 self.stan = "PIN_NIEUDANY_WYBOR"
-                self.setKomunikat(
+                self.ustaw_komunikat(
                     "Nie udało się zebrać próbek",
                     "Przejść do pomiaru na podstawie PIN?",
                     color="red",
                 )
-                self.pokaz_przyciski(
+                self.pokaz_guziki(
                     primary_text="Przejdź do pomiaru",
                     secondary_text="Anuluj",
                 )
@@ -830,10 +830,10 @@ class MainWindow(QtWidgets.QMainWindow):
             klatka = self.ostatnia_klatka_bgr
             szary = cv2.cvtColor(klatka, cv2.COLOR_BGR2GRAY)
 
-            twarze = self.twarzeDb.wykryjTwarz(klatka)
+            twarze = self.baza_twarzy.detekcja(klatka)
             if not twarze:
                 self.ostatni_obrys_twarzy = None
-                self.setKomunikat(
+                self.ustaw_komunikat(
                     "Przytrzymaj twarz w obwódce",
                     f"Zbieram próbki {zapisane}/{ile_potrzeba}",
                     color="white",
@@ -852,7 +852,7 @@ class MainWindow(QtWidgets.QMainWindow):
             y2 = min(int(y + h), h_img)
 
             if x2 <= x1 or y2 <= y1:
-                self.setKomunikat(
+                self.ustaw_komunikat(
                     "Przytrzymaj twarz w obwódce",
                     f"Zbieram próbki {zapisane}/{ile_potrzeba}",
                     color="white",
@@ -860,8 +860,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 QtCore.QTimer.singleShot(80, tik)
                 return
 
-            if max(x2 - x1, y2 - y1) < config["minRozdzielczoscTwarz"]:
-                self.setKomunikat(
+            if max(x2 - x1, y2 - y1) < konfig["min_rozmiar_twarzy"]:
+                self.ustaw_komunikat(
                     "Podejdź bliżej",
                     f"Zbieram próbki {zapisane}/{ile_potrzeba}",
                     color="white",
@@ -880,9 +880,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 interpolation=cv2.INTER_LINEAR,
             )
 
-            ok, ostrosc, jasnosc = jakoscTwarzy(roi_gray_resized)
+            ok, ostrosc, jasnosc = jakosc_twarzy(roi_gray_resized)
             if not ok:
-                self.setKomunikat(
+                self.ustaw_komunikat(
                     "Stań prosto, popraw światło",
                     f"ostrość {ostrosc:0.0f}, jasność {jasnosc:0.0f}  [{zapisane}/{ile_potrzeba}]",
                     color="white",
@@ -897,55 +897,55 @@ class MainWindow(QtWidgets.QMainWindow):
             lista_obrazow.append(twarz_bgr)
             zapisane += 1
 
-            self.setKomunikat(
+            self.ustaw_komunikat(
                 "Próbka zapisana",
                 f"Zbieram próbki {zapisane}/{ile_potrzeba}",
                 color="green",
             )
 
             if zapisane >= ile_potrzeba:
-                self.twarzeDb.zbierzprobki(id_prac, lista_obrazow)
-                self.treninng_start(akcja_po="DETEKCJA_PONOWNA")
+                self.baza_twarzy.zbierzProbki(id_prac, lista_obrazow)
+                self.start_treningu(akcja_po="DETEKCJA_PONOWNA")
                 return
 
             QtCore.QTimer.singleShot(120, tik)
 
         QtCore.QTimer.singleShot(80, tik)
 
-    def treninng_start(self, akcja_po):
+    def start_treningu(self, akcja_po):
         self.akcja_po_treningu = akcja_po
 
-        self.setKomunikat("Proszę czekać…", "Trening AI", color="white")
-        self.pokaz_przyciski(primary_text=None, secondary_text=None)
+        self.ustaw_komunikat("Proszę czekać…", "Trening AI", color="white")
+        self.pokaz_guziki(primary_text=None, secondary_text=None)
 
         def watek():
-            self.twarzeDb.treningnpz()
+            self.baza_twarzy.trenuj()
             QtCore.QMetaObject.invokeMethod(
                 self,
-                "trening_koniec",
+                "koniec_treningu",
                 QtCore.Qt.QueuedConnection,
             )
 
         threading.Thread(target=watek, daemon=True).start()
 
     @QtCore.pyqtSlot()
-    def trening_koniec(self):
+    def koniec_treningu(self):
         akcja = self.akcja_po_treningu
         self.akcja_po_treningu = None
 
         if akcja == "DETEKCJA_PONOWNA":
-            self.doponowdetekcje()
+            self.tryb_ponowna_detekcja()
         else:
-            self.przejscieDetekcja()
+            self.tryb_detekcja()
 
-    def sygnalBramka_mongo(self, wejscie_ok: bool, promille: float):
+    def sygnal_bramka_mongo(self, wejscie_ok: bool, promille: float):
         if self.czy_gosc:
             if wejscie_ok:
-                GPIO.output(config["PinFurtka"], GPIO.HIGH)
+                GPIO.output(konfig["pin_furtki"], GPIO.HIGH)
 
                 def impuls():
-                    time.sleep(config["CzasOtwarciaFurtki"])
-                    GPIO.output(config["PinFurtka"], GPIO.LOW)
+                    time.sleep(konfig["czas_otwarcia"])
+                    GPIO.output(konfig["pin_furtki"], GPIO.LOW)
 
                 threading.Thread(target=impuls, daemon=True).start()
             return
@@ -955,28 +955,28 @@ class MainWindow(QtWidgets.QMainWindow):
         znacznik_czasu = datetime.now().isoformat()
 
         if wejscie_ok:
-            GPIO.output(config["PinFurtka"], GPIO.HIGH)
+            GPIO.output(konfig["pin_furtki"], GPIO.HIGH)
 
             def impuls():
-                time.sleep(config["CzasOtwarciaFurtki"])
-                GPIO.output(config["PinFurtka"], GPIO.LOW)
+                time.sleep(konfig["czas_otwarcia"])
+                GPIO.output(konfig["pin_furtki"], GPIO.LOW)
 
             threading.Thread(target=impuls, daemon=True).start()
 
-            dopiszCsv(
-                os.path.join(config["logi"], "zdarzenia.csv"),
+            zapiszDoPlikuCsv(
+                os.path.join(konfig["folder_logi"], "zdarzenia.csv"),
                 ["data_czas", "zdarzenie", "pracownik_nazwa", "pracownik_id"],
                 [znacznik_czasu, "otwarcie_bramki", nazwa_prac, id_prac],
             )
         else:
-            dopiszCsv(
-                os.path.join(config["logi"], "zdarzenia.csv"),
+            zapiszDoPlikuCsv(
+                os.path.join(konfig["folder_logi"], "zdarzenia.csv"),
                 ["data_czas", "zdarzenie", "pracownik_nazwa", "pracownik_id"],
                 [znacznik_czasu, "odmowa_dostepu", nazwa_prac, id_prac],
             )
 
-        dopiszCsv(
-            os.path.join(config["logi"], "pomiary.csv"),
+        zapiszDoPlikuCsv(
+            os.path.join(konfig["folder_logi"], "pomiary.csv"),
             ["data_czas", "pracownik_nazwa", "pracownik_id", "promile", "pomiar_po_PIN"],
             [
                 znacznik_czasu,
@@ -989,14 +989,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         pin_prac = None
         try:
-            wpis = self.twarzeDb.emp_by_id.get(self.id_pracownika_biezacego or "")
+            wpis = self.baza_twarzy.emp_by_id.get(self.id_pracownika_biezacego or "")
             if wpis:
                 pin_prac = wpis.get("pin")
         except Exception:
             pin_prac = None
 
         try:
-            self.SyncMongo(
+            self.synchronizuj_mongo(
                 znacznik_czasu, id_prac, nazwa_prac, pin_prac, promille, wejscie_ok
             )
         except Exception as e:
@@ -1012,21 +1012,21 @@ class MainWindow(QtWidgets.QMainWindow):
                 migawka = None
 
             try:
-                self.synchronizacjamail(
+                self.synchronizuj_mail(
                     znacznik_czasu, id_prac, nazwa_prac, promille, migawka
                 )
             except Exception as e:
                 print(f"[EMAIL] Błąd przy uruchamianiu wysyłki maila: {e}")
 
-    def SyncMongo(
+    def synchronizuj_mongo(
         self, znacznik_czasu, id_prac, nazwa_prac, pin_prac, promille, wejscie_ok: bool
     ):
         if MongoClient is None:
             print("[MongoDebug] Brak biblioteki pymongo – pomijam logowanie do Mongo.")
             return
 
-        mongo_uri = config.get("mongo_uri") or ""
-        nazwa_bazy = config.get("baza_mongodb") or "alkotester"
+        mongo_uri = konfig.get("mongo_uri") or ""
+        nazwa_bazy = konfig.get("nazwa_bazy_mongo") or "alkotester"
 
         print(
             f"[MongoDebug] Kolejkuję log do Mongo, uri ustawione={bool(mongo_uri)}, "
@@ -1038,22 +1038,22 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         def watek():
-            global _MONGO_CLIENT
+            global _KLIENT_MONGO
             try:
                 print("[MongoDebug] Worker start")
 
-                if _MONGO_CLIENT is None:
+                if _KLIENT_MONGO is None:
                     print("[MongoDebug] Tworzę nowy MongoClient...")
-                    _MONGO_CLIENT = MongoClient(
+                    _KLIENT_MONGO = MongoClient(
                         mongo_uri,
                         serverSelectionTimeoutMS=5000,
                         connectTimeoutMS=5000,
                         socketTimeoutMS=5000,
                     )
-                    _MONGO_CLIENT.admin.command("ping")
+                    _KLIENT_MONGO.admin.command("ping")
                     print("[MongoDebug] Połączenie z Mongo OK")
 
-                baza = _MONGO_CLIENT[nazwa_bazy]
+                baza = _KLIENT_MONGO[nazwa_bazy]
                 kolekcja = baza["wejscia"]
                 dokument = {
                     "data_czas": znacznik_czasu,
@@ -1074,33 +1074,33 @@ class MainWindow(QtWidgets.QMainWindow):
 
         threading.Thread(target=watek, daemon=True).start()
 
-    def synchronizacjamail(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
+    def synchronizuj_mail(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
         def watek():
             try:
-                self.wyslijmailOdmowa(ts, id_prac, nazwa_prac, promille, klatka_bgr)
+                self.wyslij_mail_odmowa(ts, id_prac, nazwa_prac, promille, klatka_bgr)
             except Exception as e:
                 print(f"[EMAIL] Błąd wysyłki maila: {e}")
 
         threading.Thread(target=watek, daemon=True).start()
 
-    def wyslijmailOdmowa(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
-        smtp_host = config.get("smtp_host")
+    def wyslij_mail_odmowa(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
+        smtp_host = konfig.get("smtp_host")
         if not smtp_host:
             print("[EMAIL] Brak smtp_host w config - pomijam wysyłkę maila.")
             return
 
-        smtp_port = int(config.get("smtp_port", 587))
-        smtp_user = config.get("smtp_user") or ""
-        smtp_password = config.get("smtp_password") or ""
-        smtp_use_tls = bool(config.get("smtp_use_tls", True))
-        from_addr = config.get("smtp_from") or smtp_user or "alkotester@localhost"
-        to_addr = config.get("alert_email_to")
+        smtp_port = int(konfig.get("smtp_port", 587))
+        smtp_user = konfig.get("smtp_user") or ""
+        smtp_password = konfig.get("smtp_password") or ""
+        smtp_use_tls = bool(konfig.get("uzywaj_tls", True))
+        from_addr = konfig.get("smtp_from") or smtp_user or "alkotester@localhost"
+        to_addr = konfig.get("mail_alertowy")
 
         if not to_addr:
-            print("[EMAIL] Brak alert_email_to w config - pomijam wysyłkę maila.")
+            print("[EMAIL] Brak mail_alertowy w config - pomijam wysyłkę maila.")
             return
 
-        pdf_path = self.genRaport(ts, id_prac, nazwa_prac, promille, klatka_bgr)
+        pdf_path = self.generuj_raport(ts, id_prac, nazwa_prac, promille, klatka_bgr)
         if pdf_path is None:
             print("[EMAIL] Nie udało się wygenerować PDF - nie wysyłam maila.")
             return
@@ -1144,7 +1144,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"[EMAIL] Błąd SMTP: {e}")
 
-    def genRaport(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
+    def generuj_raport(self, ts, id_prac, nazwa_prac, promille, klatka_bgr):
         try:
             from reportlab.pdfgen import canvas
             from reportlab.lib.pagesizes import A4
@@ -1158,8 +1158,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return None
 
         nazwa_czcionki = "DejaVuSans"
-        sciezka_czcionki = config.get(
-            "font", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        sciezka_czcionki = konfig.get(
+            "czcionka", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
         )
         try:
             pdfmetrics.registerFont(TTFont(nazwa_czcionki, sciezka_czcionki))
@@ -1169,7 +1169,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             nazwa_czcionki = "Helvetica"
 
-        katalog_raporty = config.get("raportOdmowy") or config.get("logi") or "logi"
+        katalog_raporty = konfig.get("folder_raporty") or konfig.get("folder_logi") or "logi"
         try:
             os.makedirs(katalog_raporty, exist_ok=True)
         except Exception as e:
@@ -1231,14 +1231,14 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"[PDF] Błąd generowania PDF: {e}")
             return None
 
-    def LED(self, wejscie_ok: bool):
+    def dioda_led(self, wejscie_ok: bool):
         try:
             pin = (
-                config["Pin_LED_otwarcie"]
+                konfig["pin_led_zielony"]
                 if wejscie_ok
-                else config["Pin_LED_odmowa"]
+                else konfig["pin_led_czerwony"]
             )
-            czas_impulsu = float(config.get("Czas_trwaniaLED", 2.0))
+            czas_impulsu = float(konfig.get("czas_swiecenia", 2.0))
             GPIO.output(pin, GPIO.HIGH)
 
             def watek():
@@ -1251,9 +1251,9 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"[LED] Błąd sterowania diodą: {e}")
 
-    def sczytaj_odl(self) -> float:
+    def odczytaj_odleglosc(self) -> float:
         try:
-            raw = self.adc.wyjscieKanal(self.kanal_odleglosc)
+            raw = self.adc.czytaj(self.kanal_odleglosc)
             napiecie = (raw / 1023.0) * 3.3
             if napiecie - 0.42 <= 0:
                 return float("inf")
@@ -1264,10 +1264,10 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             return float("inf")
 
-    def czyt_ampMikro(self, samples: int = 32):
+    def odczytaj_mikrofon(self, samples: int = 32):
         try:
             n = max(1, int(samples))
-            wartosci = [self.adc.wyjscieKanal(self.kanal_mikrofon) for _ in range(n)]
+            wartosci = [self.adc.czytaj(self.kanal_mikrofon) for _ in range(n)]
             min_v = min(wartosci)
             max_v = max(wartosci)
             avg = int(sum(wartosci) / len(wartosci))
@@ -1277,15 +1277,15 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"[MIKROFON] błąd odczytu: {e}")
             return 0, 0
 
-    def GoscPrzycisk(self):
+    def klik_gosc(self):
         self.czy_gosc = True
         self.id_pracownika_biezacego = "<gosc>"
         self.nazwa_pracownika_biezacego = "Gość"
         self.flaga_pin_zapasowy = True
-        self.przejscieRozpoznany()
+        self.tryb_rozpoznany()
 
-    def tickKamera(self):
-        klatka_bgr = self.kamera.loadklatka_cam()
+    def cykl_kamery(self):
+        klatka_bgr = self.kamera.wez_klatke()
         if klatka_bgr is None:
             return
 
@@ -1297,9 +1297,9 @@ class MainWindow(QtWidgets.QMainWindow):
             (x, y, w, h) = self.ostatni_obrys_twarzy
             x1, y1, x2, y2 = int(x), int(y), int(x + w), int(y + h)
 
-            if self.ostatnia_pewnosc >= config["prog_pewnosc_ok"]:
+            if self.ostatnia_pewnosc >= konfig["pewnosc_dobra"]:
                 kolor = (0, 255, 0)
-            elif self.ostatnia_pewnosc <= config["prog_pewnosc_niska"]:
+            elif self.ostatnia_pewnosc <= konfig["pewnosc_slaba"]:
                 kolor = (0, 255, 255)
             else:
                 kolor = (255, 255, 0)
@@ -1319,9 +1319,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         obraz_rgb = cv2.cvtColor(obraz_do_wysw, cv2.COLOR_BGR2RGB)
 
-        cel_szer = self.view.width()
-        cel_wys = self.view.height()
-        dopasowany = self.kadrZoomPrzyciecie(obraz_rgb, cel_szer, cel_wys)
+        cel_szer = self.widok.width()
+        cel_wys = self.widok.height()
+        dopasowany = self.kadr_zoom_przyciecie(obraz_rgb, cel_szer, cel_wys)
         if dopasowany is None:
             return
 
@@ -1329,13 +1329,13 @@ class MainWindow(QtWidgets.QMainWindow):
         qimg = QtGui.QImage(
             dopasowany.data, w, h, 3 * w, QtGui.QImage.Format_RGB888
         )
-        self.view.setPixmap(QtGui.QPixmap.fromImage(qimg))
+        self.widok.setPixmap(QtGui.QPixmap.fromImage(qimg))
 
-    def tickTwarz(self):
+    def cykl_twarzy(self):
         if self.ostatnia_klatka_bgr is None:
             return
 
-        id_prac, nazwa_prac, pewnosc, obrys = self.twarzeDb.rozpoznawanie(
+        id_prac, nazwa_prac, pewnosc, obrys = self.baza_twarzy.rozpoznaj(
             self.ostatnia_klatka_bgr
         )
 
@@ -1353,7 +1353,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.stan == "BEZCZYNNOSC":
             if obrys is not None:
-                self.przejscieDetekcja()
+                self.tryb_detekcja()
             return
 
         if self.stan == "DETEKCJA":
@@ -1361,7 +1361,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.licznik_nieudanych_detekcji = 0
                 self.stabilne_id_pracownika = None
                 self.licznik_stabilnych_probek = 0
-                self.setKomunikat(czas(), "Szukam twarzy…", color="white")
+                self.ustaw_komunikat(aktualnyCzas(), "Szukam twarzy…", color="white")
                 return
 
             cel_id = id_prac if id_prac else None
@@ -1377,48 +1377,48 @@ class MainWindow(QtWidgets.QMainWindow):
 
             if (
                 nazwa_prac
-                and pewnosc >= config["prog_pewnosc_ok"]
+                and pewnosc >= konfig["pewnosc_dobra"]
                 and self.stabilne_id_pracownika == id_prac
-                and self.licznik_stabilnych_probek >= config["ok_probki_podrzad"]
+                and self.licznik_stabilnych_probek >= konfig["ile_ok_podrzad"]
             ):
                 self.id_pracownika_biezacego = id_prac
                 self.nazwa_pracownika_biezacego = nazwa_prac
                 self.flaga_pin_zapasowy = False
 
-                self.douczTwarz(id_prac)
+                self.doucz_twarz(id_prac)
 
-                self.przejscieRozpoznany()
+                self.tryb_rozpoznany()
                 return
 
             self.licznik_nieudanych_detekcji += 1
-            if self.licznik_nieudanych_detekcji >= config["limit"]:
-                self.doWpisaniaPIN()
+            if self.licznik_nieudanych_detekcji >= konfig["limit_prob_detekcji"]:
+                self.tryb_wpisywania_pinu()
                 return
 
-            if pewnosc <= config["prog_pewnosc_niska"]:
-                self.setKomunikat(czas(), "Nie rozpoznaję…", color="white")
+            if pewnosc <= konfig["pewnosc_slaba"]:
+                self.ustaw_komunikat(aktualnyCzas(), "Nie rozpoznaję…", color="white")
             else:
-                self.setKomunikat(czas(), f"pewność: {pewnosc:.0f}%", color="white")
+                self.ustaw_komunikat(aktualnyCzas(), f"pewność: {pewnosc:.0f}%", color="white")
             return
 
         if self.stan == "DETEKCJA_PONOWNA":
             self.licznik_prob_ponownej_detekcji += 1
             if (
                 id_prac == self.id_pracownika_biezacego
-                and pewnosc >= config["prog_pewnosc_ok"]
+                and pewnosc >= konfig["pewnosc_dobra"]
             ):
                 self.flaga_pin_zapasowy = False
-                self.douczTwarz(id_prac)
-                self.przejscieRozpoznany()
+                self.doucz_twarz(id_prac)
+                self.tryb_rozpoznany()
                 return
 
-            if self.licznik_prob_ponownej_detekcji >= config["limitpowtorzen"]:
+            if self.licznik_prob_ponownej_detekcji >= konfig["limit_powtorzen_detekcji"]:
                 self.flaga_pin_zapasowy = True
-                self.przejscieRozpoznany()
+                self.tryb_rozpoznany()
                 return
 
             txt_conf = f"{pewnosc:.0f}%" if pewnosc is not None else ""
-            self.setKomunikat(
+            self.ustaw_komunikat(
                 "Sprawdzam twarz…",
                 f"{self.nazwa_pracownika_biezacego or ''} {txt_conf}",
                 color="white",
@@ -1429,36 +1429,36 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.ostatni_obrys_twarzy is not None:
                 self.kalibracja_widoczna_twarz = True
                 (_, _, w, h) = self.ostatni_obrys_twarzy
-                if max(w, h) >= config["minRozdzielczoscTwarz"]:
+                if max(w, h) >= konfig["min_rozmiar_twarzy"]:
                     self.kalibracja_dobra_twarz = True
             return
 
         return
 
-    def tickInterfejs(self):
+    def cykl_interfejsu(self):
         if self.stan in ("BEZCZYNNOSC", "DETEKCJA"):
-            self.lbl_gora.setText(czas())
-            self.lbl_gora.setStyleSheet(
+            self.etykieta_gora.setText(aktualnyCzas())
+            self.etykieta_gora.setStyleSheet(
                 "color:white; font-size:28px; font-weight:600;"
             )
 
 
-    def stan_kalibracjamq3(self):
+    def stan_kalibracja_mq3(self):
         def watek():
-            self.mq3.dolnyprog()
+            self.mq3.kalibruj()
             QtCore.QMetaObject.invokeMethod(
                 self,
-                "poKalibracji",
+                "po_kalibracji",
                 QtCore.Qt.QueuedConnection,
             )
 
         threading.Thread(target=watek, daemon=True).start()
 
     @QtCore.pyqtSlot()
-    def poKalibracji(self):
-        self.brakDzialania()
+    def po_kalibracji(self):
+        self.bezczynnosc()
 
-    def Zamknij(self, e: QtGui.QCloseEvent):
+    def zamknij_aplikacje(self, e: QtGui.QCloseEvent):
         for t in [
             getattr(self, "timer_pomiaru", None),
             getattr(self, "timer_kalibracji", None),
@@ -1480,7 +1480,7 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
 
         try:
-            self.adc.przerwanieOdczytu()
+            self.adc.zamknij()
         except Exception:
             pass
 
@@ -1499,10 +1499,10 @@ class MainWindow(QtWidgets.QMainWindow):
         return super().closeEvent(e)
 
     def closeEvent(self, e: QtGui.QCloseEvent):
-        return self.Zamknij(e)
+        return self.zamknij_aplikacje(e)
 
 
-def setupQT():
+def konfiguruj_qt():
     os.environ.setdefault("DISPLAY", ":0")
     os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
@@ -1511,16 +1511,16 @@ def setupQT():
     os.environ.setdefault("QT_XCB_GL_INTEGRATION", "none")
 
 
-def main():
-    setupQT()
+def uruchom():
+    konfiguruj_qt()
 
     app = QtWidgets.QApplication(sys.argv)
-    okno = MainWindow()
+    okno = GlowneOkno()
 
-    if config["PelnyEkran"]:
+    if konfig["czy_pelny_ekran"]:
         okno.showFullScreen()
     else:
-        okno.resize(config["UI_szerokosc"], config["UI_wysokosc"])
+        okno.resize(konfig["szerokosc_ekranu"], konfig["wysokosc_ekranu"])
         okno.show()
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -1529,4 +1529,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    uruchom()

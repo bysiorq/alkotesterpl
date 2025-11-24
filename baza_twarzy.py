@@ -5,46 +5,46 @@ import cv2
 import numpy as np
 from datetime import datetime
 
-from config import config
+from konfiguracja import konfig
 
 # Ścieżka do modelu YuNet (konfiguracja po polsku, ale nazwa pliku już nie ma znaczenia)
-sciezkaYunet = config.get("sciezkaYunet", "models/face_detection_yunet_2023mar.onnx")
+sciezkaYunet = konfig.get("sciezka_modelu_yunet", "models/face_detection_yunet_2023mar.onnx")
 
 
-class detektorTwarzy:
+class BazaTwarzy:
 
-    def __init__(self, katalogTwarze: str, katalogIndex: str, pracownicyListajson: str):
-        self.katalogTwarze = katalogTwarze
-        self.katalogIndex = katalogIndex
-        self.pracownicyListajson = pracownicyListajson
+    def __init__(self, folder_twarze: str, folder_indeks: str, plik_pracownicy: str):
+        self.folder_twarze = folder_twarze
+        self.folder_indeks = folder_indeks
+        self.plik_pracownicy = plik_pracownicy
 
         # wczytujemy listę pracowników (NOWY FORMAT TYLKO: {"pracownicy": [...]})
         self.wczytajPracownikow()
 
         # inicjalizacja detektorów
-        self.init_detektory()
-        self.cascade = cv2.CascadeClassifier(self.haar())
+        self.odpalDetektory()
+        self.cascade = cv2.CascadeClassifier(self.znajdzHaar())
         self.orb = cv2.ORB_create(nfeatures=1000)
 
         # indeks descriptorów ORB
-        self.index = {}
-        self.wczytajIDx()
+        self.indeks = {}
+        self.wczytajIndeks()
 
 
-    def init_detektory(self):
+    def odpalDetektory(self):
         self._det_yunet = None
         try:
             if hasattr(cv2, "FaceDetectorYN_create") and os.path.exists(sciezkaYunet):
-                prog_score = float(config.get("yunet_prog_rozpoznania", 0.85))
-                prog_nms = float(config.get("prog_najlepszadetekcja", 0.3))
-                limit_top = int(config.get("yunet_topwartosc", 5000))
+                prog_score = float(konfig.get("prog_wykrycia_yunet", 0.85))
+                prog_nms = float(konfig.get("prog_nms", 0.3))
+                limit_top = int(konfig.get("limit_top_yunet", 5000))
                 self._det_yunet = cv2.FaceDetectorYN_create(
                     sciezkaYunet, "", (320, 320), prog_score, prog_nms, limit_top
                 )
         except Exception:
             self._det_yunet = None
 
-    def wykryjTwarz(self, obraz_bgr):
+    def detekcja(self, obraz_bgr):
         wys, szer = obraz_bgr.shape[:2]
 
         # YuNet – pierwszy wybór
@@ -70,7 +70,7 @@ class detektorTwarzy:
         except Exception:
             return []
 
-    def haar(self) -> str:
+    def znajdzHaar(self) -> str:
         katalogi = []
         if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
             katalogi.append(cv2.data.haarcascades)
@@ -91,7 +91,7 @@ class detektorTwarzy:
 
     def wczytajPracownikow(self):
         try:
-            with open(self.pracownicyListajson, "r", encoding="utf-8") as f:
+            with open(self.plik_pracownicy, "r", encoding="utf-8") as f:
                 dane = json.load(f)
         except Exception:
             dane = {}
@@ -113,22 +113,22 @@ class detektorTwarzy:
             for e in self.pracownicy
         }
 
-    def zapiszpracownikow(self):
+    def zapiszPracownikow(self):
         dane = {"pracownicy": list(self.pracownicy)}
-        with open(self.pracownicyListajson, "w", encoding="utf-8") as f:
+        with open(self.plik_pracownicy, "w", encoding="utf-8") as f:
             json.dump(dane, f, ensure_ascii=False, indent=2)
         # odśwież indeksy po zapisie
         self.wczytajPracownikow()
 
-    def Czynowy_pracownik(self, id_prac: str, imie: str, pin: str):
+    def dodajNowego(self, id_prac: str, imie: str, pin: str):
         if not any((e.get("id") == id_prac) for e in self.pracownicy):
             self.pracownicy.append({"id": id_prac, "imie": imie, "pin": pin})
-            self.zapiszpracownikow()
+            self.zapiszPracownikow()
 
-        os.makedirs(os.path.join(self.katalogTwarze, id_prac), exist_ok=True)
+        os.makedirs(os.path.join(self.folder_twarze, id_prac), exist_ok=True)
 
-    def zbierzprobki(self, id_prac: str, lista_obrazow_bgr):
-        folder_prac = os.path.join(self.katalogTwarze, id_prac)
+    def zbierzProbki(self, id_prac: str, lista_obrazow_bgr):
+        folder_prac = os.path.join(self.folder_twarze, id_prac)
         os.makedirs(folder_prac, exist_ok=True)
 
         for obraz in lista_obrazow_bgr:
@@ -136,8 +136,8 @@ class detektorTwarzy:
             sciezka_wyj = os.path.join(folder_prac, nazwa)
             cv2.imwrite(sciezka_wyj, obraz, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 
-    def limitZdjec(self, id_prac: str, max_len: int):
-        folder_prac = os.path.join(self.katalogTwarze, id_prac)
+    def usunNadmiar(self, id_prac: str, max_len: int):
+        folder_prac = os.path.join(self.folder_twarze, id_prac)
         pliki = sorted(glob.glob(os.path.join(folder_prac, "*.jpg")))
         nadmiar = len(pliki) - max_len
         if nadmiar > 0:
@@ -147,58 +147,58 @@ class detektorTwarzy:
                 except Exception:
                     pass
 
-    def nowaprobkaTWARZY(self, id_prac: str, twarz_bgr_240):
+    def dodajProbke(self, id_prac: str, twarz_bgr_240):
         szary = cv2.cvtColor(twarz_bgr_240, cv2.COLOR_BGR2GRAY)
         _, deskryptory = self.orb.detectAndCompute(szary, None)
         if deskryptory is None or len(deskryptory) == 0:
             return False
 
-        if id_prac not in self.index:
-            self.index[id_prac] = []
-        self.index[id_prac].append(deskryptory)
+        if id_prac not in self.indeks:
+            self.indeks[id_prac] = []
+        self.indeks[id_prac].append(deskryptory)
 
-        max_len = config.get("max_probekPracownik", 20)
-        if len(self.index[id_prac]) > max_len:
-            self.index[id_prac] = self.index[id_prac][-max_len:]
+        max_len = konfig.get("max_fotek_pracownika", 20)
+        if len(self.indeks[id_prac]) > max_len:
+            self.indeks[id_prac] = self.indeks[id_prac][-max_len:]
 
-        folder_prac = os.path.join(self.katalogTwarze, id_prac)
+        folder_prac = os.path.join(self.folder_twarze, id_prac)
         os.makedirs(folder_prac, exist_ok=True)
         nazwa = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg"
         sciezka = os.path.join(folder_prac, nazwa)
         cv2.imwrite(sciezka, twarz_bgr_240, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 
-        self.limitZdjec(id_prac, max_len)
-        self.zapiszidx(id_prac, self.index[id_prac])
+        self.usunNadmiar(id_prac, max_len)
+        self.zapiszIndeks(id_prac, self.indeks[id_prac])
         return True
 
-    def wczytajIDx(self):
-        self.index = {}
+    def wczytajIndeks(self):
+        self.indeks = {}
         for prac in self.pracownicy:
             id_prac = prac.get("id") or prac.get("imie")
-            sciezka_npz = os.path.join(self.katalogIndex, f"{id_prac}.npz")
+            sciezka_npz = os.path.join(self.folder_indeks, f"{id_prac}.npz")
             if os.path.exists(sciezka_npz):
                 try:
                     npz = np.load(sciezka_npz, allow_pickle=True)
-                    self.index[id_prac] = list(npz.get("descriptors", []))
+                    self.indeks[id_prac] = list(npz.get("descriptors", []))
                 except Exception:
-                    self.index[id_prac] = []
+                    self.indeks[id_prac] = []
             else:
-                self.index[id_prac] = []
+                self.indeks[id_prac] = []
 
-    def zapiszidx(self, id_prac: str, lista_deskryptorow):
-        os.makedirs(self.katalogIndex, exist_ok=True)
+    def zapiszIndeks(self, id_prac: str, lista_deskryptorow):
+        os.makedirs(self.folder_indeks, exist_ok=True)
         np.savez_compressed(
-            os.path.join(self.katalogIndex, f"{id_prac}.npz"),
+            os.path.join(self.folder_indeks, f"{id_prac}.npz"),
             descriptors=np.array(lista_deskryptorow, dtype=object),
         )
 
-    def treningnpz(self, progress_callback=None):
+    def trenuj(self, progress_callback=None):
         pracownicy = self.pracownicy
         ile = len(pracownicy)
 
         for idx, prac in enumerate(pracownicy):
             id_prac = prac.get("id") or prac.get("imie")
-            folder_prac = os.path.join(self.katalogTwarze, id_prac)
+            folder_prac = os.path.join(self.folder_twarze, id_prac)
             lista_desc = []
 
             for sciezka_obr in sorted(glob.glob(os.path.join(folder_prac, "*.jpg"))):
@@ -219,15 +219,15 @@ class detektorTwarzy:
                 if desc is not None and len(desc) > 0:
                     lista_desc.append(desc)
 
-            self.index[id_prac] = lista_desc
-            self.zapiszidx(id_prac, lista_desc)
+            self.indeks[id_prac] = lista_desc
+            self.zapiszIndeks(id_prac, lista_desc)
 
             if progress_callback:
                 progress_callback(idx + 1, ile)
 
-    def rozpoznawanie(self, img_bgr):
+    def rozpoznaj(self, img_bgr):
         szary = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-        twarze = self.wykryjTwarz(img_bgr)
+        twarze = self.detekcja(img_bgr)
         if not twarze:
             return None, None, 0.0, None
 
@@ -257,9 +257,9 @@ class detektorTwarzy:
         if desc is None or len(desc) == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
 
-        prog_ratio = config["prog_dopasowaniaTwarzy"]
-        prog_min_match = config["minIloscRozpoznan"]
-        prog_margin = config["minProbkipodrzad"]
+        prog_ratio = konfig["wspolczynnik_progu"]
+        prog_min_match = konfig["min_dopasowan"]
+        prog_margin = konfig["min_probek_podrzad"]
 
         knn = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
 
@@ -267,7 +267,7 @@ class detektorTwarzy:
         najlepszy_wynik = 0
         drugi_wynik = 0
 
-        for id_prac, lista_desc in self.index.items():
+        for id_prac, lista_desc in self.indeks.items():
             wynik_emp = 0
             for dset in lista_desc:
                 if dset is None or len(dset) == 0:

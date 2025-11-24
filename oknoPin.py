@@ -1,7 +1,7 @@
 from PyQt5 import QtCore, QtWidgets
 
 
-class Pin_okno(QtWidgets.QDialog):
+class OknoPin(QtWidgets.QDialog):
     def __init__(self, parent=None, title="Wprowadź PIN"):
         super().__init__(parent)
         self.setModal(True)
@@ -31,7 +31,7 @@ class Pin_okno(QtWidgets.QDialog):
         przycisk_zamknij.setStyleSheet(
             "font-size:24px; font-weight:700; border-radius:12px; background:#550000; color:white;"
         )
-        przycisk_zamknij.clicked.connect(self.zamknijOkno)
+        przycisk_zamknij.clicked.connect(self.zamknijToOkno)
 
         pasek_gora.addWidget(etykieta_tytul, 1)
         pasek_gora.addWidget(przycisk_zamknij, 0, QtCore.Qt.AlignRight)
@@ -64,7 +64,7 @@ class Pin_okno(QtWidgets.QDialog):
         for tekst, wiersz, kol in klawisze:
             przycisk = QtWidgets.QPushButton(tekst)
             przycisk.setStyleSheet(styl_przyc)
-            przycisk.clicked.connect(lambda _, x=tekst: self.przycisk_klikniety(x))
+            przycisk.clicked.connect(lambda _, x=tekst: self.klik(x))
             siatka.addWidget(przycisk, wiersz, kol)
 
         uklad_glowny.addLayout(siatka)
@@ -72,7 +72,7 @@ class Pin_okno(QtWidgets.QDialog):
         self.resize(460, 640)
 
 
-    def przycisk_klikniety(self, t: str):
+    def klik(self, t: str):
         if t == "OK":
             self.accept()
         elif t == "←":
@@ -84,9 +84,9 @@ class Pin_okno(QtWidgets.QDialog):
         self.value = self.edit.text()
         super().accept()
 
-    def zamknijOkno(self):
+    def zamknijToOkno(self):
         self.value = ""
         super().reject()
 
-    def cyfryPin(self) -> str:
+    def wezPin(self) -> str:
         return self.value

@@ -10,17 +10,17 @@ try:
 except Exception:
     MongoClient = None
 
-from config import config
+from konfiguracja import konfig
 
 
-appFlask = Flask(__name__)
-appFlask.secret_key = "supersecretkey"
+aplikacja_flask = Flask(__name__)
+aplikacja_flask.secret_key = "supersecretkey"
 
 # Połączenie z MongoDB – nowa, polska wersja
-if MongoClient is not None and config.get("mongo_uri"):
+if MongoClient is not None and konfig.get("mongo_uri"):
     try:
-        _klient_mongo = MongoClient(config.get("mongo_uri"))
-        _baza_mongo = _klient_mongo[config.get("baza_mongodb", "alkotester")]
+        _klient_mongo = MongoClient(konfig.get("mongo_uri"))
+        _baza_mongo = _klient_mongo[konfig.get("nazwa_bazy_mongo", "alkotester")]
         # NAZWA KOLEKCJI – tu załóżmy, że w SyncMongo robisz db["wejscia"]
         _kolekcja_wejsc = _baza_mongo["wejscia"]
     except Exception:
@@ -36,25 +36,25 @@ else:
 katalog = os.path.dirname(os.path.abspath(__file__))
 
 
-def sciezkaPracownicy() -> str:
-    emp_path = config.get("pracownicyListajson", "dane/pracownicy.json")
+def sciezka_pracownicy() -> str:
+    emp_path = konfig.get("plik_pracownicy", "dane/pracownicy.json")
     if not os.path.isabs(emp_path):
         emp_path = os.path.join(katalog, emp_path)
     return emp_path
 
 
-def sciezkaLogow() -> str:
-    log_dir = config.get("logi", "logi")
+def sciezka_logow() -> str:
+    log_dir = konfig.get("folder_logi", "logi")
     if not os.path.isabs(log_dir):
         log_dir = os.path.join(katalog, log_dir)
     return log_dir
 
 
-def przydziel_PIN() -> str:
+def przydziel_pin() -> str:
     import random
 
     istniejace_piny = set()
-    emp_path = sciezkaPracownicy()
+    emp_path = sciezka_pracownicy()
     try:
         with open(emp_path, "r", encoding="utf-8") as f:
             dane = json.load(f)
@@ -72,9 +72,9 @@ def przydziel_PIN() -> str:
             return kandydat
 
 
-def pracownik_przydziel_ID() -> str:
+def przydziel_id_pracownika() -> str:
     ids: List[int] = []
-    emp_path = sciezkaPracownicy()
+    emp_path = sciezka_pracownicy()
     try:
         with open(emp_path, "r", encoding="utf-8") as f:
             dane = json.load(f)
@@ -89,7 +89,7 @@ def pracownik_przydziel_ID() -> str:
     return str(max(ids) + 1 if ids else 1)
 
 
-def format_dt_iso_na_polski(dt_str: str) -> str:
+def formatuj_date_czas(dt_str: str) -> str:
     if not dt_str:
         return ""
     try:
@@ -116,7 +116,7 @@ def opis_wyniku(kod: str) -> str:
 
 
 def wczytaj_wejscia_csv() -> List[Dict[str, Any]]:
-    log_dir = sciezkaLogow()
+    log_dir = sciezka_logow()
     log_path = os.path.join(log_dir, "wejscia.csv")
 
     if not os.path.exists(log_path):
@@ -150,7 +150,7 @@ def wczytaj_wejscia_csv() -> List[Dict[str, Any]]:
             except Exception:
                 prom = 0.0
 
-            data_czas = format_dt_iso_na_polski(data_czas_raw)
+            data_czas = formatuj_date_czas(data_czas_raw)
             zrodlo = opis_autoryzacji(pomiar_po_pin_str)
             werdykt = opis_wyniku(wynik_kod)
 
@@ -170,48 +170,48 @@ def wczytaj_wejscia_csv() -> List[Dict[str, Any]]:
         return []
 
 
-@appFlask.route("/")
-def index():
+@aplikacja_flask.route("/")
+def indeks():
     if session.get("zalogowany"):
         return redirect(url_for("tablica"))
-    return redirect(url_for("login"))
+    return redirect(url_for("logowanie"))
 
 
-@appFlask.route("/login", methods=["GET", "POST"])
-def login():
+@aplikacja_flask.route("/logowanie", methods=["GET", "POST"])
+def logowanie():
     blad = None
     if request.method == "POST":
         nazwa_uzytkownika = request.form.get("username", "").strip()
         haslo = request.form.get("password", "").strip()
         if (
-            nazwa_uzytkownika == config.get("loginAdmin")
-            and haslo == config.get("hasloAdmin")
+            nazwa_uzytkownika == konfig.get("login_admina")
+            and haslo == konfig.get("haslo_admina")
         ):
             session["zalogowany"] = True
             return redirect(url_for("tablica"))
         blad = "Zły login lub hasło"
-    return render_template_string(loginSzablon, blad=blad)
+    return render_template_string(szablon_logowania, blad=blad)
 
 
-@appFlask.route("/logout")
-def logout():
+@aplikacja_flask.route("/wyloguj")
+def wyloguj():
     session.pop("zalogowany", None)
-    return redirect(url_for("login"))
+    return redirect(url_for("logowanie"))
 
 
 def czy_zalogowany() -> bool:
     return bool(session.get("zalogowany"))
 
 
-@appFlask.route("/api/pracownicy_public", methods=["GET"])
-def api_pracownik_public():
-    oczekiwany_token = config.get("token")
+@aplikacja_flask.route("/api/pracownicy_public", methods=["GET"])
+def api_pracownicy_public():
+    oczekiwany_token = konfig.get("haslo")
     if oczekiwany_token:
         token = request.args.get("token")
         if token != oczekiwany_token:
             return "Forbidden", 403
 
-    emp_path = sciezkaPracownicy()
+    emp_path = sciezka_pracownicy()
     try:
         with open(emp_path, "r", encoding="utf-8") as f:
             dane = json.load(f)
@@ -220,10 +220,10 @@ def api_pracownik_public():
     return jsonify(dane)
 
 
-@appFlask.route("/tablica", methods=["GET"])
+@aplikacja_flask.route("/tablica", methods=["GET"])
 def tablica():
     if not czy_zalogowany():
-        return redirect(url_for("login"))
+        return redirect(url_for("logowanie"))
 
     # info po dodaniu pracownika (parametry GET)
     nowy_pin = request.args.get("nowy_pin")
@@ -256,7 +256,7 @@ def tablica():
                 except Exception:
                     prom = 0.0
 
-                data_czas = format_dt_iso_na_polski(czas_str)
+                data_czas = formatuj_date_czas(czas_str)
                 zrodlo = opis_autoryzacji(flaga_pin)
                 werdykt = opis_wyniku(wynik_kod)
 
@@ -277,11 +277,11 @@ def tablica():
     if not wpisy:
         wpisy = wczytaj_wejscia_csv()
 
-    return render_template_string(tablicawejsc, wpisy=wpisy, info=info)
+    return render_template_string(szablon_tablicy, wpisy=wpisy, info=info)
 
 
-@appFlask.route("/dodajPracownika", methods=["POST"])
-def dodajPracownika():
+@aplikacja_flask.route("/dodaj_pracownika", methods=["POST"])
+def dodaj_pracownika():
     if not czy_zalogowany():
         return redirect(url_for("tablica"))
 
@@ -291,10 +291,10 @@ def dodajPracownika():
         return redirect(url_for("tablica"))
 
     pelne_imie = f"{imie} {nazwisko}"
-    nowy_pin = przydziel_PIN()
-    nowe_id = pracownik_przydziel_ID()
+    nowy_pin = przydziel_pin()
+    nowe_id = przydziel_id_pracownika()
 
-    emp_path = sciezkaPracownicy()
+    emp_path = sciezka_pracownicy()
     try:
         with open(emp_path, "r", encoding="utf-8") as f:
             dane = json.load(f)
@@ -320,9 +320,9 @@ def dodajPracownika():
     return redirect(url_for("tablica", nowy_pin=nowy_pin, nazwa_pracownika=pelne_imie))
 
 
-def run_server():
-    port = int(os.environ.get("PORT", config.get("adminport", 8000)))
-    appFlask.run(
+def uruchom_serwer():
+    port = int(os.environ.get("PORT", konfig.get("port_admina", 8000)))
+    aplikacja_flask.run(
         host="0.0.0.0",
         port=port,
         ssl_context=None,
@@ -332,7 +332,7 @@ def run_server():
     )
 
 
-loginSzablon = """
+szablon_logowania = """
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -351,7 +351,7 @@ loginSzablon = """
     {% if blad %}
     <p class="error">{{ blad }}</p>
     {% endif %}
-    <form method="post" action="{{ url_for('login') }}">
+    <form method="post" action="{{ url_for('logowanie') }}">
         <label>Nazwa użytkownika:</label><br>
         <input type="text" name="username" placeholder="login" autofocus required><br>
         <label>Hasło:</label><br>
@@ -362,7 +362,7 @@ loginSzablon = """
 </html>
 """
 
-tablicawejsc = """
+szablon_tablicy = """
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -408,15 +408,15 @@ tablicawejsc = """
         </tbody>
     </table>
     <h2>Dodaj nowego pracownika</h2>
-    <form method="post" action="{{ url_for('dodajPracownika') }}">
+    <form method="post" action="{{ url_for('dodaj_pracownika') }}">
         <input type="text" name="first_name" placeholder="Imię" required>
         <input type="text" name="last_name" placeholder="Nazwisko" required>
         <button type="submit">Dodaj</button>
     </form>
-    <p><a href="{{ url_for('logout') }}">Wyloguj</a></p>
+    <p><a href="{{ url_for('wyloguj') }}">Wyloguj</a></p>
 </body>
 </html>
 """
 
 if __name__ == "__main__":
-    run_server()
+    uruchom_serwer()
