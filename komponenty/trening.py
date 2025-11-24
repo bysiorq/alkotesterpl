@@ -1,8 +1,19 @@
 import cv2
 import time
 import threading
+import numpy as np
 from PyQt5 import QtCore
 from konfiguracja import konfig
+
+
+def jakosc_twarzy(szare_roi, konfig_dict):
+    ostrosc = cv2.Laplacian(szare_roi, cv2.CV_64F).var()
+    jasnosc = float(np.mean(szare_roi))
+    ok = (
+        ostrosc >= konfig_dict["min_ostrosc"]
+        and konfig_dict["min_jasnosc"] <= jasnosc <= konfig_dict["max_jasnosc"]
+    )
+    return ok, ostrosc, jasnosc
 
 
 def doucz_twarz_logika(baza_twarzy, id_prac, ostatni_obrys, ostatnia_klatka_bgr, jakosc_twarzy_fn):
