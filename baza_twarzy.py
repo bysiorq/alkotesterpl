@@ -12,41 +12,28 @@ _SCIEZKA_YUNET = konfig.get("sciezka_modelu_yunet", "models/face_detection_yunet
 
 
 class BazaTwarzy:
-    """
-    Baza pracowników wraz z ich zdjęciami twarzy i deskryptorami ORB.
-    Implementacja wzorowana na sprawdzonej klasie FaceDB, dostosowana do polskiego nazewnictwa.
-    """
-
     def __init__(self, folder_twarze: str, folder_indeks: str, plik_pracownicy: str):
         self.folder_twarze = folder_twarze
         self.folder_indeks = folder_indeks
         self.plik_pracownicy = plik_pracownicy
 
-        # Załaduj bazę pracowników
         self.wczytajPracownikow()
 
-        # Przygotuj detektory twarzy
         self._inicjalizuj_detektory()
-        # Fallback Haar Cascade
         self.cascade = cv2.CascadeClassifier(self._znajdz_haar())
 
-        # Ekstraktor cech ORB
         self.orb = cv2.ORB_create(nfeatures=1000)
 
-        # Indeks deskryptorów w pamięci
         self.indeks = {}
         self.wczytajIndeks()
 
-    # ----- Detektory twarzy -----
     def _inicjalizuj_detektory(self):
-        """Przygotuj detektor YuNet, jeśli dostępny."""
         self._det_yunet = None
         try:
             if hasattr(cv2, "FaceDetectorYN_create") and os.path.exists(_SCIEZKA_YUNET):
                 prog_score = float(konfig.get("prog_wykrycia_yunet", 0.85))
                 prog_nms = float(konfig.get("prog_nms", 0.3))
                 limit_top = int(konfig.get("limit_top_yunet", 5000))
-                # Rozmiar wejścia ustawiony zostanie dynamicznie w detekcja
                 self._det_yunet = cv2.FaceDetectorYN_create(
                     _SCIEZKA_YUNET, "", (320, 320), prog_score, prog_nms, limit_top
                 )
@@ -54,12 +41,8 @@ class BazaTwarzy:
             self._det_yunet = None
 
     def detekcja(self, obraz_bgr):
-        """
-        Zwróć listę ramek (x,y,w,h) wykrytych twarzy w pikselach.
-        Najpierw stosowany jest YuNet, a następnie Haar jako fallback.
-        """
         wys, szer = obraz_bgr.shape[:2]
-        # YuNet
+        #YuNet
         if self._det_yunet is not None:
             try:
                 self._det_yunet.setInputSize((szer, wys))
@@ -73,7 +56,7 @@ class BazaTwarzy:
                     return ramki
             except Exception:
                 pass
-        # Haar fallback
+        #Haar fallback
         try:
             szary = cv2.cvtColor(obraz_bgr, cv2.COLOR_BGR2GRAY)
             twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
@@ -81,9 +64,7 @@ class BazaTwarzy:
         except Exception:
             return []
 
-    # ----- Init helpers -----
     def _znajdz_haar(self) -> str:
-        """Zwróć ścieżkę do pliku haarcascade_frontalface_default.xml."""
         katalogi = []
         if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
             katalogi.append(cv2.data.haarcascades)
@@ -101,19 +82,16 @@ class BazaTwarzy:
         return nazwa
 
     def wczytajPracownikow(self):
-        """Wczytaj plik employees.json do struktur pomocniczych."""
         try:
             with open(self.plik_pracownicy, "r", encoding="utf-8") as f:
                 dane = json.load(f)
         except Exception:
             dane = {}
         
-        # Obsługa formatu {"pracownicy": [...]} oraz starego {"employees": [...]}
-        self.pracownicy = dane.get("pracownicy") or dane.get("employees", [])
+        self.pracownicy = dane.get("pracownicy")
         if not isinstance(self.pracownicy, list):
             self.pracownicy = []
 
-        # indeks pracowników po pinie i id
         self.emp_by_pin = {
             e["pin"]: e
             for e in self.pracownicy
@@ -125,22 +103,18 @@ class BazaTwarzy:
         }
 
     def zapiszPracownikow(self):
-        """Zapisz employees.json po modyfikacji i odśwież indeksy."""
         dane = {"pracownicy": self.pracownicy}
         with open(self.plik_pracownicy, "w", encoding="utf-8") as f:
             json.dump(dane, f, ensure_ascii=False, indent=2)
         self.wczytajPracownikow()
 
     def dodajNowego(self, id_prac: str, imie: str, pin: str):
-        """Dopisz pracownika do bazy jeśli jeszcze go nie ma."""
         if not any((e.get("id") == id_prac) for e in self.pracownicy):
             self.pracownicy.append({"id": id_prac, "imie": imie, "pin": pin})
             self.zapiszPracownikow()
         os.makedirs(os.path.join(self.folder_twarze, id_prac), exist_ok=True)
 
-    # ----- Zrzuty twarzy -----
     def zbierzProbki(self, id_prac: str, lista_obrazow_bgr):
-        """Zapisz listę zrzutów twarzy (lista obrazów BGR) dla pracownika."""
         folder_prac = os.path.join(self.folder_twarze, id_prac)
         os.makedirs(folder_prac, exist_ok=True)
         for obraz in lista_obrazow_bgr:
@@ -149,7 +123,6 @@ class BazaTwarzy:
             cv2.imwrite(sciezka_wyj, obraz, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 
     def usunNadmiar(self, id_prac: str, max_len: int):
-        """Usuń najstarsze zrzuty twarzy jeśli jest ich zbyt dużo."""
         folder_prac = os.path.join(self.folder_twarze, id_prac)
         pliki = sorted(glob.glob(os.path.join(folder_prac, "*.jpg")))
         nadmiar = len(pliki) - max_len
@@ -161,10 +134,6 @@ class BazaTwarzy:
                     pass
 
     def dodajProbke(self, id_prac: str, twarz_bgr_240):
-        """
-        Dodaj próbkę twarzy do indeksu i zapisz do katalogu faces.
-        Zwraca True jeśli próbka została zaakceptowana.
-        """
         szary = cv2.cvtColor(twarz_bgr_240, cv2.COLOR_BGR2GRAY)
         _, deskryptory = self.orb.detectAndCompute(szary, None)
         if deskryptory is None or len(deskryptory) == 0:
@@ -189,7 +158,6 @@ class BazaTwarzy:
 
     # ----- Indeks ORB -----
     def wczytajIndeks(self):
-        """Załaduj deskryptory z plików .npz w index_dir."""
         self.indeks = {}
         for prac in self.pracownicy:
             id_prac = prac.get("id") or prac.get("imie") or prac.get("name")
@@ -204,7 +172,6 @@ class BazaTwarzy:
                 self.indeks[id_prac] = []
 
     def zapiszIndeks(self, id_prac: str, lista_deskryptorow):
-        """Zapisz listę deskryptorów ORB dla danego pracownika."""
         os.makedirs(self.folder_indeks, exist_ok=True)
         np.savez_compressed(
             os.path.join(self.folder_indeks, f"{id_prac}.npz"),
@@ -212,9 +179,6 @@ class BazaTwarzy:
         )
 
     def trenuj(self, progress_callback=None):
-        """
-        Przebuduj indeks dla wszystkich pracowników na podstawie zrzutów twarzy.
-        """
         pracownicy = self.pracownicy
         ile = len(pracownicy)
         for idx, prac in enumerate(pracownicy):
@@ -226,7 +190,6 @@ class BazaTwarzy:
                 if obraz is None:
                     continue
                 szary = cv2.cvtColor(obraz, cv2.COLOR_BGR2GRAY)
-                # Używamy Haara do wycięcia twarzy ze zdjęć treningowych - tak jak w FaceDB
                 twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
                 if len(twarze) > 0:
                     (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
@@ -242,12 +205,7 @@ class BazaTwarzy:
             if progress_callback:
                 progress_callback(idx + 1, ile)
 
-    # ----- Rozpoznawanie -----
     def rozpoznaj(self, img_bgr):
-        """
-        Rozpoznaj twarz w podanej klatce.
-        :returns: (id_prac lub None, nazwa lub None, pewność%, bbox lub None)
-        """
         szary = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
         twarze = self.detekcja(img_bgr)
         if not twarze:
@@ -280,7 +238,7 @@ class BazaTwarzy:
             
         prog_ratio = konfig.get("wspolczynnik_progu", 0.75)
         prog_min_match = konfig.get("min_dopasowan", 15)
-        prog_margin = konfig.get("min_probek_podrzad", 5) # Uwaga: w FaceDB to recognition_min_margin
+        prog_margin = konfig.get("min_probek_podrzad", 5)
         
         knn = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         

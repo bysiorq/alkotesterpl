@@ -18,16 +18,11 @@ from baza_twarzy import BazaTwarzy
 from kamera import Kamera
 from oknoPin import OknoPin
 
-# Komponenty
 from komponenty import sprzet, pomiary, wydarzenia, gui_helpery, trening, stany, inicjalizacja, synchronizacja
 from komponenty.baza_danych import loguj_do_mongo
 from komponenty.poczta import synchronizuj_mail
 from komponenty.raporty import generuj_raport_pdf
 from komponenty.synchronizacja import synchronizuj_pracownikow
-
-
-
-
 
 class GlowneOkno(QtWidgets.QMainWindow):
 
@@ -35,7 +30,6 @@ class GlowneOkno(QtWidgets.QMainWindow):
         super().__init__()
         inicjalizacja.zainicjalizuj_aplikacje(self)
         
-        # Connect signals that might need local methods or were not connected in init
         self.guzik_gosc.clicked.connect(self.klik_gosc)
         self.guzik_glowny.clicked.connect(self.klik_guzik1)
         self.guzik_pomocniczy.clicked.connect(self.klik_guzik2)

@@ -36,7 +36,6 @@ def kadr_zoom_przyciecie(img, target_w, target_h):
 
 
 def ustaw_komunikat(okno, tekst_gora, tekst_srodek=None, color="white", use_center=True):
-    """Ustawia tekst komunikatu w interfejsie."""
     if color == "green":
         kolor_css = "#00ff00"
     elif color == "red":
@@ -58,7 +57,6 @@ def ustaw_komunikat(okno, tekst_gora, tekst_srodek=None, color="white", use_cent
 
 
 def pokaz_guziki(okno, primary_text=None, secondary_text=None):
-    """Pokazuje/ukrywa przyciski interfejsu."""
     if primary_text is None:
         okno.guzik_glowny.hide()
     else:

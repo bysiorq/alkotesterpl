@@ -9,7 +9,6 @@ from oknoPin import OknoPin
 from komponenty import gui_helpery, wydarzenia, trening, sprzet
 from komponenty.synchronizacja import synchronizuj_pracownikow
 
-# Stany aplikacji - stałe
 BEZCZYNNOSC = "BEZCZYNNOSC"
 DETEKCJA = "DETEKCJA"
 DETEKCJA_PONOWNA = "DETEKCJA_PONOWNA"

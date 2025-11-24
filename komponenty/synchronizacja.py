@@ -13,30 +13,20 @@ def synchronizuj_pracownikow(baza_twarzy):
         katalog_biez = os.path.dirname(os.path.abspath(__file__))
         sciezka_prac = os.path.join(katalog_biez, "..", sciezka_prac)
 
-    if not baza_url:
-        print("[SYNC] Brak URL bazy - pomijam synchronizację")
-        return
 
     url = f"{baza_url.rstrip('/')}/api/pracownicy_public"
     params = {"token": token} if token else {}
 
     try:
-        # Pobierz pracowników ze zdalnego serwera
         odp = requests.get(url, params=params, timeout=10)
         odp.raise_for_status()
         dane = odp.json()
         
-        if not isinstance(dane, dict):
-            print("[SYNC] Błędny format danych z serwera")
-            return
 
-        lista_prac_zdalna = dane.get("pracownicy") or dane.get("employees", [])
-        if not isinstance(lista_prac_zdalna, list):
-            lista_prac_zdalna = []
+        lista_prac_zdalna = dane.get("pracownicy")
         
         print(f"[SYNC] Pobrano {len(lista_prac_zdalna)} pracowników z serwera")
-        
-        # Nadpisz lokalny plik - serwer jest jedynym źródłem prawdy
+
         dane_do_zapisu = {"pracownicy": lista_prac_zdalna}
         
         print(f"[SYNC] Zapisuję {len(lista_prac_zdalna)} pracowników do pliku (cache)")

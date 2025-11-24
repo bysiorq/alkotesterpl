@@ -8,9 +8,6 @@ from komponenty import sprzet
 from komponenty.synchronizacja import synchronizuj_pracownikow
 
 def zainicjalizuj_aplikacje(okno):
-    """
-    Inicjalizuje komponenty aplikacji, sprzęt i UI.
-    """
     sprawdzKatalogi()
 
     # Inicjalizacja sprzętu (GPIO, diody, bramka)
@@ -191,17 +188,12 @@ def zainicjalizuj_aplikacje(okno):
     okno.timer_kamery.start(int(1000 / max(1, konfig["klatki_na_sekunde"])))
 
     okno.timer_twarzy = QtCore.QTimer(okno)
-    # okno.timer_twarzy.timeout.connect(okno.cykl_twarzy) # Connect in main or stany
 
     okno.timer_interfejsu = QtCore.QTimer(okno)
-    # okno.timer_interfejsu.timeout.connect(okno.cykl_interfejsu)
 
     okno.timer_rozpoznany = QtCore.QTimer(okno)
-    # okno.timer_rozpoznany.timeout.connect(okno.cykl_rozpoznany)
 
     okno.timer_pomiaru = QtCore.QTimer(okno)
-    # okno.timer_pomiaru.timeout.connect(okno.pomiar)
 
     okno.timer_sync = QtCore.QTimer(okno)
-    # okno.timer_sync.timeout.connect(okno.cykl_synchronizacji)
     okno.timer_sync.start(1 * 60 * 1000)
