@@ -10,11 +10,11 @@ try:
 except Exception:
     MongoClient = None
 
-from konfiguracja import konfig
+from konfiguracja_serwer import konfig
 
 
 aplikacja_flask = Flask(__name__)
-aplikacja_flask.secret_key = "supersecretkey"
+aplikacja_flask.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey-change-in-production")
 
 # Połączenie z MongoDB – nowa, polska wersja
 if MongoClient is not None and konfig.get("mongo_uri"):
