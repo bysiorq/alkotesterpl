@@ -42,5 +42,5 @@ def loguj_do_mongo(znacznik_czasu, id_prac, nazwa_prac, pin_prac, promille, wejs
             print(f"[Mongo] Błąd logowania: {e}")
 
     threading.Thread(target=watek, daemon=True).start()
-
+    
 synchronizuj_mongo_z_flaga = loguj_do_mongo

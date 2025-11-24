@@ -1,8 +1,6 @@
 import cv2
 
-
 def kadr_zoom_przyciecie(img, target_w, target_h):
-    """Przycina i skaluje obraz do docelowych wymiarów zachowując proporcje."""
     if img is None or target_w <= 0 or target_h <= 0:
         return None
 

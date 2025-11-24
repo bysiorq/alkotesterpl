@@ -6,10 +6,6 @@ from konfiguracja import konfig
 
 
 def doucz_twarz_logika(baza_twarzy, id_prac, ostatni_obrys, ostatnia_klatka_bgr, jakosc_twarzy_fn):
-    """
-    Logika dokładczania twarzy - wyci przycina twarz z klatki i dodaje do bazy.
-    Zwraca True jeśli udało się dodać probkę.
-    """
     try:
         if ostatni_obrys is None or ostatnia_klatka_bgr is None:
             return False
@@ -41,9 +37,6 @@ def doucz_twarz_logika(baza_twarzy, id_prac, ostatni_obrys, ostatnia_klatka_bgr,
 
 
 def uruchom_trening_async(baza_twarzy, okno, callback_slot_name):
-    """
-    Uruchamia trening w osobnym wątku i wywołuje callback po zakończeniu.
-    """
     def watek():
         baza_twarzy.trenuj()
         QtCore.QMetaObject.invokeMethod(
@@ -56,10 +49,6 @@ def uruchom_trening_async(baza_twarzy, okno, callback_slot_name):
 
 
 def zbierz_probke_twarzy(klatka_bgr, twarze, konfig_dict, jakosc_twarzy_fn):
-    """
-    Przetwarza jedną klatkę i próbuje wyciąć dobrą próbkę twarzy.
-    Zwraca (success, twarz_bgr_240x240) lub (False, None)
-    """
     if not twarze:
         return False, None
 
