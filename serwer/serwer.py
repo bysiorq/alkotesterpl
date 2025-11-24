@@ -20,7 +20,7 @@ aplikacja_flask.secret_key = "supersecretkey"
 if MongoClient is not None and konfig.get("mongo_uri"):
     try:
         _klient_mongo = MongoClient(konfig.get("mongo_uri"))
-        _baza_mongo = _klient_mongo[konfig.get("nazwa_bazy_mongo", "alkotester")]
+        _baza_mongo = _klient_mongo[konfig.get("nazwa_bazy_mongo")]
         # NAZWA KOLEKCJI – tu załóżmy, że w SyncMongo robisz db["wejscia"]
         _kolekcja_wejsc = _baza_mongo["wejscia"]
     except Exception:
