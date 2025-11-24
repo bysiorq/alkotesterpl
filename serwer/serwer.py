@@ -415,8 +415,8 @@ szablon_tablicy = """
     <h1>Harmonogram wejść pracowników</h1>
     
     <div class="nav-buttons">
-        <a href="{{ url_for('pracownicy') }}">👥 Zarządzaj pracownikami</a>
-        <a href="{{ url_for('wyloguj') }}">🚪 Wyloguj</a>
+        <a href="{{ url_for('pracownicy') }}">Zarządzaj pracownikami</a>
+        <a href="{{ url_for('wyloguj') }}">Wyloguj</a>
     </div>
     
     {% if info %}
@@ -504,8 +504,8 @@ szablon_pracownikow = """
     <h1>Zarządzanie pracownikami</h1>
     
     <div class="nav-buttons">
-        <a href="{{ url_for('tablica') }}">📊 Harmonogram wejść</a>
-        <a href="{{ url_for('wyloguj') }}">🚪 Wyloguj</a>
+        <a href="{{ url_for('tablica') }}">Harmonogram wejść</a>
+        <a href="{{ url_for('wyloguj') }}">Wyloguj</a>
     </div>
     
     {% if info %}
@@ -513,7 +513,7 @@ szablon_pracownikow = """
     {% endif %}
     
     <div class="form-container">
-        <h2>➕ Dodaj nowego pracownika</h2>
+        <h2>Dodaj nowego pracownika</h2>
         <form method="post" action="{{ url_for('dodaj_pracownika') }}">
             <input type="text" name="first_name" placeholder="Imię" required>
             <input type="text" name="last_name" placeholder="Nazwisko" required>
@@ -521,7 +521,7 @@ szablon_pracownikow = """
         </form>
     </div>
     
-    <h2>👥 Lista pracowników</h2>
+    <h2>Lista pracowników</h2>
     <table>
         <thead>
             <tr>
