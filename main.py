@@ -51,7 +51,7 @@ class GlowneOkno(QtWidgets.QMainWindow):
         shortcut.activated.connect(self.save_screenshot)
     
     def save_screenshot(self):
-        out_dir = os.path.expanduser("alkotesterpl/screeny")
+        out_dir = os.path.expanduser("screeny")
         os.makedirs(out_dir, exist_ok=True)
         pixmap = self.grab()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
