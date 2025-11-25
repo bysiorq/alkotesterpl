@@ -23,7 +23,7 @@ konfig = {
 
     # Twarze (YuNet)
     "sciezka_modelu_yunet": "models/face_detection_yunet_2023mar.onnx",
-    "prog_wykrycia_yunet": 0.85,
+    "prog_wykrycia_yunet": 0.65,
     "prog_nms": 0.3,
     "limit_top_yunet": 5000,
 
@@ -32,8 +32,8 @@ konfig = {
     "pewnosc_dobra": 55.0,
     "pewnosc_slaba": 20.0,
 
-    "limit_prob_detekcji": 5,
-    "limit_powtorzen_detekcji": 3,
+    "limit_prob_detekcji": 3,
+    "limit_powtorzen_detekcji": 1,
 
     "ile_fotek_trening": 10,
     "czas_na_trening": 15,
