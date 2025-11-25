@@ -14,7 +14,7 @@ konfig = {
     "wysokosc_ekranu": 1280,
     "wysokosc_paska": 240,
     "czy_pelny_ekran": True,
-    "ukryj_myszke": True,
+    "ukryj_myszke": False,
 
     # Kamera
     "rozdzialka_kamery": (1280, 720),

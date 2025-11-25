@@ -47,6 +47,17 @@ class GlowneOkno(QtWidgets.QMainWindow):
         self.pokaz_guziki(primary_text=None, secondary_text=None)
 
         self.stan_kalibracjamq3()
+        shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+Shift+S"), self)
+        shortcut.activated.connect(self.save_screenshot)
+    
+    def save_screenshot(self):
+        out_dir = os.path.expanduser("alkotesterpl/screeny")
+        os.makedirs(out_dir, exist_ok=True)
+        pixmap = self.grab()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path= os.path.join(out_dir, f"zrzut_{ts}.png")
+        pixmap.save(path)
+        print(f"[SCREENSHOT] Zapisano zrzut ekranu do: ", path)
 
     def kadr_zoom_przyciecie(self, img, target_w, target_h):
         return gui_helpery.kadr_zoom_przyciecie(img, target_w, target_h)
