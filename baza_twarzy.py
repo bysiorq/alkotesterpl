@@ -236,7 +236,7 @@ class BazaTwarzy:
         if desc is None or len(desc) == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
-        prog_ratio = konfig.get("wspolczynnik_progu", 0.75)
+        prog_podobienstwa = konfig.get("wspolczynnik_progu", 0.75)
         prog_min_match = konfig.get("min_dopasowan", 15)
         prog_margin = konfig.get("min_probek_podrzad", 5)
         
@@ -256,7 +256,7 @@ class BazaTwarzy:
                     if len(para) < 2:
                         continue
                     m1, m2 = para[0], para[1]
-                    if m1.distance < prog_ratio * m2.distance:
+                    if m1.distance < prog_podobienstwa * m2.distance:
                         wynik_emp += 1
             
             if wynik_emp > najlepszy_wynik:
