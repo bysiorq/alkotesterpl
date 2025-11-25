@@ -23,14 +23,17 @@ if MongoClient is not None and konfig.get("mongo_uri"):
         _baza_mongo = _klient_mongo[konfig.get("nazwa_bazy_mongo")]
         # NAZWA KOLEKCJI – tu załóżmy, że w SyncMongo robisz db["wejscia"]
         _kolekcja_wejsc = _baza_mongo["wejscia"]
+        _kolekcja_pracownicy = _baza_mongo["pracownicy"]
     except Exception:
         _klient_mongo = None
         _baza_mongo = None
         _kolekcja_wejsc = None
+        _kolekcja_pracownicy = None
 else:
     _klient_mongo = None
     _baza_mongo = None
     _kolekcja_wejsc = None
+    _kolekcja_pracownicy = None
 
 
 katalog = os.path.dirname(os.path.abspath(__file__))
@@ -50,21 +53,70 @@ def sciezka_logow() -> str:
     return log_dir
 
 
-def przydziel_pin() -> str:
-    import random
-
-    istniejace_piny = set()
+def pobierz_pracownikow() -> List[Dict[str, Any]]:
+    pracownicy = []
+    
+    if _kolekcja_pracownicy is not None:
+        try:
+            kursor = _kolekcja_pracownicy.find({}, {"_id": 0})
+            pracownicy = list(kursor)
+            return pracownicy
+        except Exception as e:
+            print(f"Błąd pobierania pracowników z Mongo: {e}")
+            # Fallback do pliku
+    
     emp_path = sciezka_pracownicy()
     try:
         with open(emp_path, "r", encoding="utf-8") as f:
             dane = json.load(f)
-        lista = dane.get("pracownicy") or []
-        for emp in lista:
-            pin = emp.get("pin")
-            if pin:
-                istniejace_piny.add(str(pin))
+        pracownicy = dane.get("pracownicy") or []
     except Exception:
-        pass
+        pracownicy = []
+        
+    return pracownicy
+
+
+def zapisz_pracownika(nowy_pracownik: Dict[str, Any]):
+    if _kolekcja_pracownicy is not None:
+        try:
+            _kolekcja_pracownicy.insert_one(nowy_pracownik.copy())
+        except Exception as e:
+            print(f"Błąd zapisu pracownika do Mongo: {e}")
+
+    emp_path = sciezka_pracownicy()
+    try:
+        try:
+            with open(emp_path, "r", encoding="utf-8") as f:
+                dane = json.load(f)
+            lista = dane.get("pracownicy") or []
+        except Exception:
+            dane = {}
+            lista = []
+        
+        if not any(p.get("id") == nowy_pracownik.get("id") for p in lista):
+            lista.append(nowy_pracownik)
+            dane["pracownicy"] = lista
+            
+            dirpath = os.path.dirname(emp_path)
+            if dirpath:
+                os.makedirs(dirpath, exist_ok=True)
+                
+            with open(emp_path, "w", encoding="utf-8") as f:
+                json.dump(dane, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Błąd zapisu pracownika do pliku: {e}")
+
+
+def przydziel_pin() -> str:
+    import random
+
+    istniejace_piny = set()
+    
+    lista = pobierz_pracownikow()
+    for emp in lista:
+        pin = emp.get("pin")
+        if pin:
+            istniejace_piny.add(str(pin))
 
     while True:
         kandydat = f"{random.randint(0, 9999):04d}"
@@ -74,18 +126,14 @@ def przydziel_pin() -> str:
 
 def przydziel_id_pracownika() -> str:
     ids: List[int] = []
-    emp_path = sciezka_pracownicy()
-    try:
-        with open(emp_path, "r", encoding="utf-8") as f:
-            dane = json.load(f)
-        lista = dane.get("pracownicy") or []
-        for emp in lista:
-            try:
-                ids.append(int(emp.get("id")))
-            except Exception:
-                continue
-    except Exception:
-        pass
+    
+    lista = pobierz_pracownikow()
+    for emp in lista:
+        try:
+            ids.append(int(emp.get("id")))
+        except Exception:
+            continue
+            
     return str(max(ids) + 1 if ids else 1)
 
 
@@ -211,12 +259,8 @@ def api_pracownicy_public():
         if token != oczekiwany_token:
             return "Forbidden", 403
 
-    emp_path = sciezka_pracownicy()
-    try:
-        with open(emp_path, "r", encoding="utf-8") as f:
-            dane = json.load(f)
-    except Exception:
-        dane = {"pracownicy": []}
+    lista_pracownikow = pobierz_pracownikow()
+    dane = {"pracownicy": lista_pracownikow}
     return jsonify(dane)
 
 
@@ -225,7 +269,6 @@ def tablica():
     if not czy_zalogowany():
         return redirect(url_for("logowanie"))
 
-    # info po dodaniu pracownika (parametry GET)
     nowy_pin = request.args.get("nowy_pin")
     nazwa_pracownika = request.args.get("nazwa_pracownika")
     if nowy_pin and nazwa_pracownika:
@@ -235,7 +278,6 @@ def tablica():
 
     wpisy: List[Dict[str, Any]] = []
 
-    # Preferencja: MongoDB, jeśli dostępne – UŻYWAMY TWOICH POLSKICH PÓL
     if _kolekcja_wejsc is not None:
         try:
             kursor = (
@@ -273,7 +315,6 @@ def tablica():
         except Exception:
             wpisy = []
 
-    # fallback: CSV, gdy brak Mongo albo brak danych – też w nowym, polskim formacie
     if not wpisy:
         wpisy = wczytaj_wejscia_csv()
 
@@ -285,7 +326,6 @@ def pracownicy():
     if not czy_zalogowany():
         return redirect(url_for("logowanie"))
     
-    # Pobierz info po dodaniu pracownika
     nowy_pin = request.args.get("nowy_pin")
     nazwa_pracownika = request.args.get("nazwa_pracownika")
     if nowy_pin and nazwa_pracownika:
@@ -293,14 +333,7 @@ def pracownicy():
     else:
         info = None
     
-    # Wczytaj listę pracowników
-    emp_path = sciezka_pracownicy()
-    try:
-        with open(emp_path, "r", encoding="utf-8") as f:
-            dane = json.load(f)
-        lista_pracownikow = dane.get("pracownicy") or []
-    except Exception:
-        lista_pracownikow = []
+    lista_pracownikow = pobierz_pracownikow()
     
     return render_template_string(szablon_pracownikow, pracownicy=lista_pracownikow, info=info)
 
@@ -319,28 +352,13 @@ def dodaj_pracownika():
     nowy_pin = przydziel_pin()
     nowe_id = przydziel_id_pracownika()
 
-    emp_path = sciezka_pracownicy()
-    try:
-        with open(emp_path, "r", encoding="utf-8") as f:
-            dane = json.load(f)
-        lista = dane.get("pracownicy") or []
-    except Exception:
-        dane = {}
-        lista = []
-
-    # TUTAJ TEŻ JEST POLSKO: "imie", nie "name"
-    lista.append({"id": nowe_id, "imie": pelne_imie, "pin": nowy_pin})
-    dane["pracownicy"] = lista
-
-    dirpath = os.path.dirname(emp_path)
-    if dirpath:
-        os.makedirs(dirpath, exist_ok=True)
-
-    try:
-        with open(emp_path, "w", encoding="utf-8") as f:
-            json.dump(dane, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    nowy_pracownik = {
+        "id": nowe_id,
+        "imie": pelne_imie,
+        "pin": nowy_pin
+    }
+    
+    zapisz_pracownika(nowy_pracownik)
 
     return redirect(url_for("pracownicy", nowy_pin=nowy_pin, nazwa_pracownika=pelne_imie))
 
