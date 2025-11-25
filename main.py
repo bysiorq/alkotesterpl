@@ -47,57 +47,7 @@ class GlowneOkno(QtWidgets.QMainWindow):
         self.pokaz_guziki(primary_text=None, secondary_text=None)
 
         self.stan_kalibracjamq3()
-        shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+Shift+S"), self)
-        shortcut.setContext(QtCore.Qt.ApplicationShortcut)
-        shortcut.activated.connect(self.save_screenshot)
     
-    def save_screenshot(self):
-        out_dir = os.path.expanduser("screeny")
-        os.makedirs(out_dir, exist_ok=True)
-        
-        # Pobieramy geometrię ekranu
-        screen = QtWidgets.QApplication.primaryScreen()
-        if screen:
-            geo_screen = screen.geometry()
-            w, h = geo_screen.width(), geo_screen.height()
-        else:
-            w, h = 1920, 1080
-            geo_screen = QtCore.QRect(0, 0, w, h)
-
-        # Tworzymy puste płótno
-        full_pixmap = QtGui.QPixmap(w, h)
-        full_pixmap.fill(QtCore.Qt.black)
-        
-        painter = QtGui.QPainter(full_pixmap)
-        
-        # Pobieramy wszystkie okna aplikacji
-        widgets = QtWidgets.QApplication.topLevelWidgets()
-        
-        # Sortujemy tak, żeby główne okno było pod spodem (rysowane pierwsze)
-        # Zakładamy, że self (GlowneOkno) jest tłem, a reszta to dialogi
-        widgets = sorted(widgets, key=lambda x: 0 if x == self else 1)
-
-        for widget in widgets:
-            if widget.isVisible() and not widget.isMinimized():
-                # Pobieramy zrzut konkretnego widgetu (renderowanie wewnętrzne Qt)
-                pix = widget.grab()
-                
-                # Pozycja widgetu względem ekranu
-                geo_widget = widget.geometry()
-                
-                # Rysujemy na głównym płótnie w odpowiednim miejscu
-                x = geo_widget.x() - geo_screen.x()
-                y = geo_widget.y() - geo_screen.y()
-                
-                painter.drawPixmap(x, y, pix)
-        
-        painter.end()
-
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path= os.path.join(out_dir, f"zrzut_{ts}.png")
-        full_pixmap.save(path)
-        print(f"[SCREENSHOT] Zapisano zrzut ekranu do: ", path)
-
     def kadr_zoom_przyciecie(self, img, target_w, target_h):
         return gui_helpery.kadr_zoom_przyciecie(img, target_w, target_h)
 
