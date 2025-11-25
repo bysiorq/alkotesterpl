@@ -93,7 +93,7 @@ def tryb_wpisywania_pinu(okno):
             pass
         wpis = okno.baza_twarzy.emp_by_pin.get(pin)
         if not wpis:
-            okno.ustaw_komunikat("Zły PIN - brak danych", "", color="red")
+            okno.ustaw_komunikat("", "Zły PIN - brak danych", color="red")
             okno.pokaz_guziki(primary_text=None, secondary_text=None)
             QtCore.QTimer.singleShot(2000, lambda: bezczynnosc(okno))
             return
