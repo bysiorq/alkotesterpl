@@ -6,12 +6,17 @@ from PyQt5 import QtCore
 from konfiguracja import konfig
 
 
-def jakosc_twarzy(szare_roi, konfig_dict):
+def jakosc_twarzy(szare_roi, config):
     ostrosc = cv2.Laplacian(szare_roi, cv2.CV_64F).var()
     jasnosc = float(np.mean(szare_roi))
+
+    min_ostrosc = config["min_ostrosc"]
+    min_jasnosc = config["min_jasnosc"]
+    max_jasnosc = config["max_jasnosc"]
+
     ok = (
-        ostrosc >= konfig_dict["min_ostrosc"]
-        and konfig_dict["min_jasnosc"] <= jasnosc <= konfig_dict["max_jasnosc"]
+        ostrosc >= min_ostrosc
+        and min_jasnosc <= jasnosc <= max_jasnosc
     )
     return ok, ostrosc, jasnosc
 
@@ -59,7 +64,7 @@ def uruchom_trening_async(baza_twarzy, okno, callback_slot_name):
     threading.Thread(target=watek, daemon=True).start()
 
 
-def zbierz_probke_twarzy(klatka_bgr, twarze, konfig_dict, jakosc_twarzy_fn):
+def zbierz_probke_twarzy(klatka_bgr, twarze, config, jakosc_twarzy_fn):
     if not twarze:
         return False, None
 
@@ -74,7 +79,8 @@ def zbierz_probke_twarzy(klatka_bgr, twarze, konfig_dict, jakosc_twarzy_fn):
     if x2 <= x1 or y2 <= y1:
         return False, None
 
-    if max(x2 - x1, y2 - y1) < konfig_dict["min_rozmiar_twarzy"]:
+    min_rozmiar = config["min_rozmiar_twarzy"]
+    if max(x2 - x1, y2 - y1) < min_rozmiar:
         return False, None
 
     roi_gray = cv2.cvtColor(klatka_bgr[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
