@@ -7,24 +7,32 @@ from konfiguracja import konfig
 def inicjalizuj_gpio():
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
-    GPIO.setup(konfig["pin_furtki"], GPIO.OUT, initial=GPIO.LOW)
-    GPIO.setup(konfig["pin_led_zielony"], GPIO.OUT, initial=GPIO.LOW)
-    GPIO.setup(konfig["pin_led_czerwony"], GPIO.OUT, initial=GPIO.LOW)
+    pin_furtki = konfig["pin_furtki"]
+    pin_led_zielony = konfig["pin_led_zielony"]
+    pin_led_czerwony = konfig["pin_led_czerwony"]
+    
+    GPIO.setup(pin_furtki, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(pin_led_zielony, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(pin_led_czerwony, GPIO.OUT, initial=GPIO.LOW)
 
 
 def otworz_bramke():
-    GPIO.output(konfig["pin_furtki"], GPIO.HIGH)
+    pin_furtki = konfig["pin_furtki"]
+    GPIO.output(pin_furtki, GPIO.HIGH)
 
     def impuls():
-        time.sleep(konfig["czas_otwarcia"])
-        GPIO.output(konfig["pin_furtki"], GPIO.LOW)
+        czas_otwarcia = konfig["czas_otwarcia"]
+        time.sleep(czas_otwarcia)
+        GPIO.output(pin_furtki, GPIO.LOW)
 
     threading.Thread(target=impuls, daemon=True).start()
 
 
 def dioda_led(wejscie_ok: bool):
     try:
-        pin = konfig["pin_led_zielony"] if wejscie_ok else konfig["pin_led_czerwony"]
+        pin_led_zielony = konfig["pin_led_zielony"]
+        pin_led_czerwony = konfig["pin_led_czerwony"]
+        pin = pin_led_zielony if wejscie_ok else pin_led_czerwony
         czas_impulsu = float(konfig.get("czas_swiecenia", 2.0))
         GPIO.output(pin, GPIO.HIGH)
 

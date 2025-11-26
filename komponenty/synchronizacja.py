@@ -23,7 +23,8 @@ def synchronizuj_pracownikow(baza_twarzy):
     if MongoClient and mongo_uri:
         try:
             client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-            db = client[konfig.get("nazwa_bazy_mongo", "alkotester")]
+            nazwa_bazy = konfig.get("nazwa_bazy_mongo", "alkotester")
+            db = client[nazwa_bazy]
             coll = db["pracownicy"]
             
             # Pobieramy wszystkich, bez _id
@@ -39,7 +40,8 @@ def synchronizuj_pracownikow(baza_twarzy):
     if not uzyto_mongo:
         baza_url = konfig.get("url_bazy_render")
         token = konfig.get("haslo")
-        url = f"{baza_url.rstrip('/')}/api/pracownicy_public"
+        if baza_url:
+            url = f"{baza_url.rstrip('/')}/api/pracownicy_public"
         params = {"token": token} if token else {}
 
         try:

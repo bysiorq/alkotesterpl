@@ -128,7 +128,8 @@ def tryb_rozpoznany(okno):
     okno.kalibracja_dobra_twarz = False
     okno.kalibracja_widoczna_twarz = False
 
-    okno.timer_twarzy.start(konfig["co_ile_detekcja"])
+    co_ile_detekcja = konfig["co_ile_detekcja"]
+    okno.timer_twarzy.start(co_ile_detekcja)
 
     okno.zatrzymaj_timer(okno.timer_interfejsu)
     okno.zatrzymaj_timer(okno.timer_pomiaru)
@@ -303,8 +304,9 @@ def pomiar(okno):
         dt = 0.1
 
     odleglosc_cm = okno.odczytaj_odleglosc()
+    probki_mikrofonu = konfig.get("probki_mikrofonu")
     amp, _ = okno.odczytaj_mikrofon(
-        samples=konfig.get("probki_mikrofonu")
+        samples=probki_mikrofonu
     )
 
     dmuchanie_wykryte = (
@@ -319,8 +321,9 @@ def pomiar(okno):
         except Exception:
             pass
 
+    czas_dmuchania = konfig["czas_dmuchania"]
     postep = max(
-        0.0, min(okno.czas_dmuchania / konfig["czas_dmuchania"], 1.0)
+        0.0, min(okno.czas_dmuchania / czas_dmuchania, 1.0)
     )
     okno.pasek_postepu.setValue(int(postep * 100))
     okno.pasek_postepu.show()
@@ -342,7 +345,8 @@ def pomiar(okno):
         else:
             okno.ustaw_komunikat("Dmuchaj", "", color="white", use_center=False)
 
-    if okno.czas_dmuchania >= konfig["czas_dmuchania"]:
+    czas_dmuchania = konfig["czas_dmuchania"]
+    if okno.czas_dmuchania >= czas_dmuchania:
         okno.zatrzymaj_timer(okno.timer_pomiaru)
         probki = list(okno.lista_probek_pomiarowych)
 
@@ -465,7 +469,8 @@ def zbieranie_probek_pracownika(okno):
             QtCore.QTimer.singleShot(80, tik)
             return
 
-        if max(x2 - x1, y2 - y1) < konfig["min_rozmiar_twarzy"]:
+        min_rozmiar = konfig["min_rozmiar_twarzy"]
+        if max(x2 - x1, y2 - y1) < min_rozmiar:
             okno.ustaw_komunikat(
                 "Podejdź bliżej",
                 f"Zbieram próbki {zapisane}/{ile_potrzeba}",

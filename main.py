@@ -240,9 +240,11 @@ class GlowneOkno(QtWidgets.QMainWindow):
             (x, y, w, h) = self.ostatni_obrys_twarzy
             x1, y1, x2, y2 = int(x), int(y), int(x + w), int(y + h)
 
-            if self.ostatnia_pewnosc >= konfig["pewnosc_dobra"]:
+            pewnosc_dobra = konfig["pewnosc_dobra"]
+            pewnosc_slaba = konfig["pewnosc_slaba"]
+            if self.ostatnia_pewnosc >= pewnosc_dobra:
                 kolor = (0, 255, 0)
-            elif self.ostatnia_pewnosc <= konfig["pewnosc_slaba"]:
+            elif self.ostatnia_pewnosc <= pewnosc_slaba:
                 kolor = (0, 255, 255)
             else:
                 kolor = (255, 255, 0)
@@ -318,11 +320,13 @@ class GlowneOkno(QtWidgets.QMainWindow):
                 self.stabilne_id_pracownika = None
                 self.licznik_stabilnych_probek = 0
 
+            pewnosc_dobra = konfig["pewnosc_dobra"]
+            ile_ok_podrzad = konfig["ile_ok_podrzad"]
             if (
                 nazwa_prac
-                and pewnosc >= konfig["pewnosc_dobra"]
+                and pewnosc >= pewnosc_dobra
                 and self.stabilne_id_pracownika == id_prac
-                and self.licznik_stabilnych_probek >= konfig["ile_ok_podrzad"]
+                and self.licznik_stabilnych_probek >= ile_ok_podrzad
             ):
                 self.id_pracownika_biezacego = id_prac
                 self.nazwa_pracownika_biezacego = nazwa_prac
@@ -334,11 +338,13 @@ class GlowneOkno(QtWidgets.QMainWindow):
                 return
 
             self.licznik_nieudanych_detekcji += 1
-            if self.licznik_nieudanych_detekcji >= konfig["limit_prob_detekcji"]:
+            limit_prob = konfig["limit_prob_detekcji"]
+            if self.licznik_nieudanych_detekcji >= limit_prob:
                 self.tryb_wpisywania_pinu()
                 return
 
-            if pewnosc <= konfig["pewnosc_slaba"]:
+            pewnosc_slaba = konfig["pewnosc_slaba"]
+            if pewnosc <= pewnosc_slaba:
                 self.ustaw_komunikat(aktualnyCzas(), "Nie rozpoznaję…", color="white")
             else:
                 self.ustaw_komunikat(aktualnyCzas(), f"pewność: {pewnosc:.0f}%", color="white")
@@ -346,16 +352,18 @@ class GlowneOkno(QtWidgets.QMainWindow):
 
         if self.stan == "DETEKCJA_PONOWNA":
             self.licznik_prob_ponownej_detekcji += 1
+            pewnosc_dobra = konfig["pewnosc_dobra"]
             if (
                 id_prac == self.id_pracownika_biezacego
-                and pewnosc >= konfig["pewnosc_dobra"]
+                and pewnosc >= pewnosc_dobra
             ):
                 self.flaga_pin_zapasowy = False
                 self.doucz_twarz(id_prac)
                 self.tryb_rozpoznany()
                 return
 
-            if self.licznik_prob_ponownej_detekcji >= konfig["limit_powtorzen_detekcji"]:
+            limit_powtorzen = konfig["limit_powtorzen_detekcji"]
+            if self.licznik_prob_ponownej_detekcji >= limit_powtorzen:
                 self.flaga_pin_zapasowy = True
                 self.tryb_rozpoznany()
                 return
@@ -372,7 +380,8 @@ class GlowneOkno(QtWidgets.QMainWindow):
             if self.ostatni_obrys_twarzy is not None:
                 self.kalibracja_widoczna_twarz = True
                 (_, _, w, h) = self.ostatni_obrys_twarzy
-                if max(w, h) >= konfig["min_rozmiar_twarzy"]:
+                min_rozmiar = konfig["min_rozmiar_twarzy"]
+                if max(w, h) >= min_rozmiar:
                     self.kalibracja_dobra_twarz = True
             return
 
@@ -463,7 +472,9 @@ def uruchom():
     if konfig["czy_pelny_ekran"]:
         okno.showFullScreen()
     else:
-        okno.resize(konfig["szerokosc_ekranu"], konfig["wysokosc_ekranu"])
+        szer = konfig["szerokosc_ekranu"]
+        wys = konfig["wysokosc_ekranu"]
+        okno.resize(szer, wys)
         okno.show()
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
