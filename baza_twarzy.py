@@ -236,8 +236,8 @@ class BazaTwarzy:
         if deskryptory is None or len(deskryptory) == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
-        prog_ratio = konfig.get("wspolczynnik_progu", 0.75)
-        prog_min_match = konfig.get("min_dopasowan", 15)
+        prog_podobienstwa = konfig.get("wspolczynnik_progu", 0.75)
+        prog_min = konfig.get("min_dopasowan", 15)
         prog_margin = konfig.get("min_probek_podrzad", 5)
         
         knn = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
@@ -256,7 +256,7 @@ class BazaTwarzy:
                     if len(para) < 2:
                         continue
                     m1, m2 = para[0], para[1]
-                    if m1.distance < prog_ratio * m2.distance:
+                    if m1.distance < prog_podobienstwa * m2.distance:
                         wynik_emp += 1
             
             if wynik_emp > najlepszy_wynik:
@@ -264,7 +264,7 @@ class BazaTwarzy:
             elif wynik_emp > drugi_wynik:
                 drugi_wynik = wynik_emp
                 
-        if najlepszy_wynik < prog_min_match:
+        if najlepszy_wynik < prog_min:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
         if (najlepszy_wynik - drugi_wynik) < prog_margin:
