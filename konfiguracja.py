@@ -45,7 +45,7 @@ konfig = {
     "min_dopasowan": 65,
     "wspolczynnik_progu": 0.75,
     "min_probek_podrzad": 10,
-    "ile_ok_podrzad": 2,
+    "ile_ok_podrzad": 3,
 
     "max_fotek_pracownika": 40,
 
