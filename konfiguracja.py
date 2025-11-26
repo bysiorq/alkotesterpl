@@ -35,7 +35,7 @@ konfig = {
     "limit_prob_detekcji": 3,
     "limit_powtorzen_detekcji": 1,
 
-    "ile_fotek_trening": 10,
+    "ile_fotek_trening": 20,
     "czas_na_trening": 15,
 
     "min_ostrosc": 60.0,
