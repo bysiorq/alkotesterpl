@@ -142,7 +142,7 @@ class BazaTwarzy:
             self.indeks[id_prac] = []
         self.indeks[id_prac].append(deskryptory)
         
-        max_len = konfig.get("max_fotek_pracownika", 20)
+        max_len = konfig.get("max_fotek_pracownika", 40)
         if len(self.indeks[id_prac]) > max_len:
             self.indeks[id_prac] = self.indeks[id_prac][-max_len:]
             
