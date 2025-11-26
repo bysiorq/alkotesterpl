@@ -25,7 +25,7 @@ konfig = {
     "sciezka_modelu_yunet": "models/face_detection_yunet_2023mar.onnx",
     "prog_wykrycia_yunet": 0.65,
     "prog_nms": 0.3,
-    "limit_top_yunet": 5000,
+    "limit_top_yunet": 100,
 
     "co_ile_detekcja": 1000,
     "min_rozmiar_twarzy": 120,
