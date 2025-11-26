@@ -184,7 +184,7 @@ class BazaTwarzy:
         for idx, prac in enumerate(pracownicy):
             id_prac = prac.get("id") or prac.get("imie") or prac.get("name")
             folder_prac = os.path.join(self.folder_twarze, id_prac)
-            lista_desc = []
+            lista_deskryptorow = []
             for sciezka_obr in sorted(glob.glob(os.path.join(folder_prac, "*.jpg"))):
                 obraz = cv2.imread(sciezka_obr)
                 if obraz is None:
@@ -197,11 +197,11 @@ class BazaTwarzy:
                 else:
                     roi = szary
                 roi = cv2.resize(roi, (240, 240), interpolation=cv2.INTER_LINEAR)
-                _, desc = self.orb.detectAndCompute(roi, None)
-                if desc is not None and len(desc) > 0:
-                    lista_desc.append(desc)
-            self.indeks[id_prac] = lista_desc
-            self.zapiszIndeks(id_prac, lista_desc)
+                _, deskryptory = self.orb.detectAndCompute(roi, None)
+                if deskryptory is not None and len(deskryptory) > 0:
+                    lista_deskryptorow.append(deskryptory)
+            self.indeks[id_prac] = lista_deskryptorow
+            self.zapiszIndeks(id_prac, lista_deskryptorow)
             if progress_callback:
                 progress_callback(idx + 1, ile)
 
@@ -232,8 +232,8 @@ class BazaTwarzy:
         except cv2.error:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
-        _, desc = self.orb.detectAndCompute(roi_szary, None)
-        if desc is None or len(desc) == 0:
+        _, deskryptory = self.orb.detectAndCompute(roi_szary, None)
+        if deskryptory is None or len(deskryptory) == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
         prog_ratio = konfig.get("wspolczynnik_progu", 0.75)
@@ -246,12 +246,12 @@ class BazaTwarzy:
         najlepszy_wynik = 0
         drugi_wynik = 0
         
-        for id_prac, lista_desc in self.indeks.items():
+        for id_prac, lista_deskryptorow in self.indeks.items():
             wynik_emp = 0
-            for dset in lista_desc:
-                if dset is None or len(dset) == 0:
+            for deskryptory_pracownika in lista_deskryptorow:
+                if deskryptory_pracownika is None or len(deskryptory_pracownika) == 0:
                     continue
-                dopasowania = knn.knnMatch(desc, dset, k=2)
+                dopasowania = knn.knnMatch(deskryptory, deskryptory_pracownika, k=2)
                 for para in dopasowania:
                     if len(para) < 2:
                         continue
