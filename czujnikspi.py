@@ -48,4 +48,4 @@ class CzujnikMQ3:
             self.bazowy_odczyt = wartosc
 
         delta = max(0.0, wartosc - self.bazowy_odczyt)
-        return delta / max(1e-6, self.wspolczynnikPromile)
+        return delta / self.wspolczynnikPromile
