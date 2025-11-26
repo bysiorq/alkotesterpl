@@ -9,11 +9,9 @@ from konfiguracja import konfig
 def jakosc_twarzy(szare_roi, config):
     ostrosc = cv2.Laplacian(szare_roi, cv2.CV_64F).var()
     jasnosc = float(np.mean(szare_roi))
-
     min_ostrosc = config["min_ostrosc"]
     min_jasnosc = config["min_jasnosc"]
     max_jasnosc = config["max_jasnosc"]
-
     ok = (
         ostrosc >= min_ostrosc
         and min_jasnosc <= jasnosc <= max_jasnosc
