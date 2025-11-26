@@ -479,19 +479,19 @@ def zbieranie_probek_pracownika(okno):
             QtCore.QTimer.singleShot(80, tik)
             return
 
-        roi_gray = szary[y1:y2, x1:x2]
-        if roi_gray.size == 0:
+        ramka_szara = szary[y1:y2, x1:x2]
+        if ramka_szara.size == 0:
             QtCore.QTimer.singleShot(80, tik)
             return
 
-        roi_gray_resized = cv2.resize(
-            roi_gray,
+        ramka_szara_skalowana = cv2.resize(
+            ramka_szara,
             (240, 240),
             interpolation=cv2.INTER_LINEAR,
         )
 
         # Import jakosc_twarzy z trening.py
-        ok, ostrosc, jasnosc = trening.jakosc_twarzy(roi_gray_resized, konfig)
+        ok, ostrosc, jasnosc = trening.jakosc_twarzy(ramka_szara_skalowana, konfig)
         if not ok:
             okno.ustaw_komunikat(
                 "Stań prosto, popraw światło",

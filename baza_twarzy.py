@@ -193,11 +193,11 @@ class BazaTwarzy:
                 twarze = self.cascade.detectMultiScale(szary, 1.1, 5)
                 if len(twarze) > 0:
                     (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
-                    roi = szary[y:y + h, x:x + w]
+                    ramka = szary[y:y + h, x:x + w]
                 else:
-                    roi = szary
-                roi = cv2.resize(roi, (240, 240), interpolation=cv2.INTER_LINEAR)
-                _, deskryptory = self.orb.detectAndCompute(roi, None)
+                    ramka = szary
+                ramka = cv2.resize(ramka, (240, 240), interpolation=cv2.INTER_LINEAR)
+                _, deskryptory = self.orb.detectAndCompute(ramka, None)
                 if deskryptory is not None and len(deskryptory) > 0:
                     lista_deskryptorow.append(deskryptory)
             self.indeks[id_prac] = lista_deskryptorow
@@ -223,16 +223,16 @@ class BazaTwarzy:
         if x2 <= x or y2 <= y:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
         
-        roi_szary = szary[y:y2, x:x2]
-        if roi_szary.size == 0:
+        ramka_szara = szary[y:y2, x:x2]
+        if ramka_szara.size == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
         try:
-            roi_szary = cv2.resize(roi_szary, (240, 240), interpolation=cv2.INTER_LINEAR)
+            ramka_szara = cv2.resize(ramka_szara, (240, 240), interpolation=cv2.INTER_LINEAR)
         except cv2.error:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
-        _, deskryptory = self.orb.detectAndCompute(roi_szary, None)
+        _, deskryptory = self.orb.detectAndCompute(ramka_szara, None)
         if deskryptory is None or len(deskryptory) == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             

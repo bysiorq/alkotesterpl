@@ -6,9 +6,9 @@ from PyQt5 import QtCore
 from konfiguracja import konfig
 
 
-def jakosc_twarzy(szare_roi, config):
-    ostrosc = cv2.Laplacian(szare_roi, cv2.CV_64F).var()
-    jasnosc = float(np.mean(szare_roi))
+def jakosc_twarzy(szara_ramka, config):
+    ostrosc = cv2.Laplacian(szara_ramka, cv2.CV_64F).var()
+    jasnosc = float(np.mean(szara_ramka))
 
     min_ostrosc = config["min_ostrosc"]
     min_jasnosc = config["min_jasnosc"]
@@ -83,13 +83,13 @@ def zbierz_probke_twarzy(klatka_bgr, twarze, config, jakosc_twarzy_fn):
     if max(x2 - x1, y2 - y1) < min_rozmiar:
         return False, None
 
-    roi_gray = cv2.cvtColor(klatka_bgr[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
-    if roi_gray.size == 0:
+    ramka_szara = cv2.cvtColor(klatka_bgr[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+    if ramka_szara.size == 0:
         return False, None
 
-    roi_gray_resized = cv2.resize(roi_gray, (240, 240), interpolation=cv2.INTER_LINEAR)
+    ramka_szara_skalowana = cv2.resize(ramka_szara, (240, 240), interpolation=cv2.INTER_LINEAR)
 
-    ok, ostrosc, jasnosc = jakosc_twarzy_fn(roi_gray_resized)
+    ok, ostrosc, jasnosc = jakosc_twarzy_fn(ramka_szara_skalowana)
     if not ok:
         return False, (ostrosc, jasnosc)
 
