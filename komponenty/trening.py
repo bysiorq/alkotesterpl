@@ -13,7 +13,6 @@ def jakosc_twarzy(szara_ramka, config):
     min_ostrosc = config["min_ostrosc"]
     min_jasnosc = config["min_jasnosc"]
     max_jasnosc = config["max_jasnosc"]
-
     ok = (
         ostrosc >= min_ostrosc
         and min_jasnosc <= jasnosc <= max_jasnosc
