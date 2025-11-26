@@ -22,7 +22,7 @@ class BazaTwarzy:
         self._inicjalizuj_detektory()
         self.cascade = cv2.CascadeClassifier(self._znajdz_haar())
 
-        self.orb = cv2.ORB_create(nfeatures=1000)
+        self.orb = cv2.ORB_create(nfeatures=1500)
 
         self.indeks = {}
         self.wczytajIndeks()
@@ -59,7 +59,7 @@ class BazaTwarzy:
         #Haar fallback
         try:
             szary = cv2.cvtColor(obraz_bgr, cv2.COLOR_BGR2GRAY)
-            twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
+            twarze = self.cascade.detectMultiScale(szary, 1.1, 5)
             return [(int(x), int(y), int(ww), int(hh)) for (x, y, ww, hh) in twarze]
         except Exception:
             return []
@@ -190,7 +190,7 @@ class BazaTwarzy:
                 if obraz is None:
                     continue
                 szary = cv2.cvtColor(obraz, cv2.COLOR_BGR2GRAY)
-                twarze = self.cascade.detectMultiScale(szary, 1.2, 5)
+                twarze = self.cascade.detectMultiScale(szary, 1.1, 5)
                 if len(twarze) > 0:
                     (x, y, w, h) = max(twarze, key=lambda r: r[2] * r[3])
                     roi = szary[y:y + h, x:x + w]
