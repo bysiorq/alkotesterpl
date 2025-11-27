@@ -24,7 +24,7 @@ def loguj_do_mongo(znacznik_czasu, id_prac, nazwa_prac, pin_prac, promille, wejs
                     socketTimeoutMS=5000,
                 )
 
-            baza = _KLIENT_MONGO[konfig.get("nazwa_bazy_mongo", "alkotester")]
+            baza = _KLIENT_MONGO[konfig.get("nazwa_bazy_mongo")]
             kolekcja = baza["wejscia"]
             
             dokument = {
