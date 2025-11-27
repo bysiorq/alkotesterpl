@@ -12,7 +12,7 @@ from konfiguracja import konfig
 def generuj_raport_pdf(ts, id_prac, nazwa_prac, promille, klatka_bgr):
     pdfmetrics.registerFont(TTFont("DejaVuSans", konfig["czcionka"]))
     
-    katalog_raporty = konfig.get("folder_raporty", "logi/raporty_odmowy")
+    katalog_raporty = konfig.get("folder_raporty")
     
     # Upewnij się że ścieżka jest relatywna do projektu, nie do roota systemu
     if not os.path.isabs(katalog_raporty):

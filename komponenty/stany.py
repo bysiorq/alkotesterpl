@@ -189,11 +189,11 @@ def werdykt(okno, promille):
     okno.ostatni_wynik_promile = float(promille)
 
     try:
-        prog_ok = float(konfig.get("prog_trzezwosci", 0.0))
+        prog_ok = float(konfig.get("prog_trzezwosci"))
     except Exception:
         prog_ok = 0.0
     try:
-        prog_odmowa = float(konfig.get("prog_pijany", 0.5))
+        prog_odmowa = float(konfig.get("prog_pijany"))
     except Exception:
         prog_odmowa = 0.5
 

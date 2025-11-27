@@ -33,7 +33,7 @@ def dioda_led(wejscie_ok: bool):
         pin_led_zielony = konfig["pin_led_zielony"]
         pin_led_czerwony = konfig["pin_led_czerwony"]
         pin = pin_led_zielony if wejscie_ok else pin_led_czerwony
-        czas_impulsu = float(konfig.get("czas_swiecenia", 2.0))
+        czas_impulsu = float(konfig.get("czas_swiecenia"))
         GPIO.output(pin, GPIO.HIGH)
 
         def watek():

@@ -8,7 +8,7 @@ from datetime import datetime
 from konfiguracja import konfig
 
 # Ścieżka do modelu YuNet
-_SCIEZKA_YUNET = konfig.get("sciezka_modelu_yunet", "models/face_detection_yunet_2023mar.onnx")
+_SCIEZKA_YUNET = konfig.get("sciezka_modelu_yunet")
 
 
 class BazaTwarzy:
@@ -31,9 +31,9 @@ class BazaTwarzy:
         self._det_yunet = None
         try:
             if hasattr(cv2, "FaceDetectorYN_create") and os.path.exists(_SCIEZKA_YUNET):
-                prog_score = float(konfig.get("prog_wykrycia_yunet", 0.85))
-                prog_nms = float(konfig.get("prog_nms", 0.3))
-                limit_top = int(konfig.get("limit_top_yunet", 5000))
+                prog_score = float(konfig.get("prog_wykrycia_yunet"))
+                prog_nms = float(konfig.get("prog_nms"))
+                limit_top = int(konfig.get("limit_top_yunet"))
                 self._det_yunet = cv2.FaceDetectorYN_create(
                     _SCIEZKA_YUNET, "", (320, 320), prog_score, prog_nms, limit_top
                 )
@@ -142,7 +142,7 @@ class BazaTwarzy:
             self.indeks[id_prac] = []
         self.indeks[id_prac].append(deskryptory)
         
-        max_len = konfig.get("max_fotek_pracownika", 40)
+        max_len = konfig.get("max_fotek_pracownika")
         if len(self.indeks[id_prac]) > max_len:
             self.indeks[id_prac] = self.indeks[id_prac][-max_len:]
             
@@ -236,9 +236,9 @@ class BazaTwarzy:
         if deskryptory is None or len(deskryptory) == 0:
             return None, None, 0.0, (x, y, max(0, x2 - x), max(0, y2 - y))
             
-        prog_podobienstwa = konfig.get("wspolczynnik_progu", 0.75)
-        prog_min = konfig.get("min_dopasowan", 15)
-        prog_margin = konfig.get("min_probek_podrzad", 5)
+        prog_podobienstwa = konfig.get("wspolczynnik_progu")
+        prog_min = konfig.get("min_dopasowan")
+        prog_margin = konfig.get("min_probek_podrzad")
         
         knn = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         

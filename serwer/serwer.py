@@ -40,14 +40,14 @@ katalog = os.path.dirname(os.path.abspath(__file__))
 
 
 def sciezka_pracownicy() -> str:
-    emp_path = konfig.get("plik_pracownicy", "dane/pracownicy.json")
+    emp_path = konfig.get("plik_pracownicy")
     if not os.path.isabs(emp_path):
         emp_path = os.path.join(katalog, emp_path)
     return emp_path
 
 
 def sciezka_logow() -> str:
-    log_dir = konfig.get("folder_logi", "logi")
+    log_dir = konfig.get("folder_logi")
     if not os.path.isabs(log_dir):
         log_dir = os.path.join(katalog, log_dir)
     return log_dir
@@ -364,7 +364,7 @@ def dodaj_pracownika():
 
 
 def uruchom_serwer():
-    port = int(os.environ.get("PORT", konfig.get("port_admina", 8000)))
+    port = int(os.environ.get("PORT", konfig.get("port_admina")))
     aplikacja_flask.run(
         host="0.0.0.0",
         port=port,

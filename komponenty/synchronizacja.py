@@ -10,7 +10,7 @@ except ImportError:
 
 
 def synchronizuj_pracownikow(baza_twarzy):
-    sciezka_prac = konfig.get("plik_pracownicy", "dane/pracownicy.json")
+    sciezka_prac = konfig.get("plik_pracownicy")
     if not os.path.isabs(sciezka_prac):
         katalog_biez = os.path.dirname(os.path.abspath(__file__))
         sciezka_prac = os.path.join(katalog_biez, "..", sciezka_prac)
@@ -22,7 +22,7 @@ def synchronizuj_pracownikow(baza_twarzy):
     if MongoClient and mongo_uri:
         try:
             client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-            nazwa_bazy = konfig.get("nazwa_bazy_mongo", "alkotester")
+            nazwa_bazy = konfig.get("nazwa_bazy_mongo")
             db = client[nazwa_bazy]
             coll = db["pracownicy"]
             
