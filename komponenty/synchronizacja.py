@@ -18,7 +18,6 @@ def synchronizuj_pracownikow(baza_twarzy):
     lista_prac_zdalna = []
     uzyto_mongo = False
 
-    # 1. Próba pobrania z MongoDB (priorytet)
     mongo_uri = konfig.get("mongo_uri")
     if MongoClient and mongo_uri:
         try:
@@ -27,7 +26,6 @@ def synchronizuj_pracownikow(baza_twarzy):
             db = client[nazwa_bazy]
             coll = db["pracownicy"]
             
-            # Pobieramy wszystkich, bez _id
             cursor = coll.find({}, {"_id": 0})
             lista_prac_zdalna = list(cursor)
             
@@ -36,7 +34,6 @@ def synchronizuj_pracownikow(baza_twarzy):
         except Exception as e:
             print(f"[SYNC] Błąd połączenia z MongoDB: {e}")
     
-    # 2. Fallback do serwera HTTP (jeśli Mongo zawiodło lub brak konfiguracji)
     if not uzyto_mongo:
         baza_url = konfig.get("url_bazy_render")
         token = konfig.get("haslo")
@@ -53,10 +50,8 @@ def synchronizuj_pracownikow(baza_twarzy):
             print(f"[SYNC] Pobrano {len(lista_prac_zdalna)} pracowników z serwera HTTP")
         except Exception as e:
             print(f"[SYNC] Błąd synchronizacji HTTP: {e}")
-            # Jeśli oba sposoby zawiodły, kończymy (zostaną stare dane w pliku)
             return
 
-    # Zapis do pliku cache
     try:
         dane_do_zapisu = {"pracownicy": lista_prac_zdalna}
         
