@@ -127,9 +127,9 @@ class BazaTwarzy:
         pliki = sorted(glob.glob(os.path.join(folder_prac, "*.jpg")))
         nadmiar = len(pliki) - max_len
         if nadmiar > 0:
-            for sciezka in pliki[:nadmiar]:
+            for do_usuniecia in pliki[:nadmiar]:
                 try:
-                    os.remove(sciezka)
+                    os.remove(do_usuniecia)
                 except Exception:
                     pass
 
